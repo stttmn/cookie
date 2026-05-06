@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>アラーム</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .clock {
+      font-size: 72px;
+      font-weight: 200;
+      letter-spacing: 4px;
+      margin-bottom: 60px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border-radius: 20px;
+      padding: 36px 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      min-width: 320px;
+    }
+
+    h2 {
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    input[type="time"] {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid #333;
+      color: #fff;
+      font-size: 48px;
+      font-weight: 200;
+      letter-spacing: 2px;
+      text-align: center;
+      width: 100%;
+      padding: 8px 0;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="time"]:focus {
+      border-bottom-color: #fff;
+    }
+
+    input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      opacity: 0.4;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    button:hover {
+      opacity: 0.85;
+    }
+
+    button:active {
+      opacity: 0.7;
+    }
+
+    #setBtn {
+      background: #fff;
+      color: #000;
+    }
+
+    #cancelBtn {
+      background: #2a2a2a;
+      color: #fff;
+      display: none;
+    }
+
+    .status {
+      font-size: 13px;
+      color: #666;
+      min-height: 20px;
+      text-align: center;
+    }
+
+    .status.active {
+      color: #4ade80;
+    }
+
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      z-index: 100;
+    }
+
+    .overlay.show {
+      display: flex;
+    }
+
+    .overlay .alarm-time {
+      font-size: 80px;
+      font-weight: 200;
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .overlay p {
+      font-size: 18px;
+      color: #888;
+    }
+
+    .overlay button {
+      width: 180px;
+      background: #fff;
+      color: #000;
+      font-size: 16px;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="clock" id="clock">00:00:00</div>
+
+  <div class="card">
+    <h2>アラーム設定</h2>
+    <input type="time" id="alarmTime" value="07:00">
+    <button id="setBtn">セット</button>
+    <button id="cancelBtn">キャンセル</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="alarm-time" id="overlayTime"></div>
+    <p>アラーム！</p>
+    <button onclick="dismiss()">停止</button>
+  </div>
+
+  <script>
+    let alarmTime = null;
+    let ringing = false;
+    let audioCtx = null;
+    let oscillator = null;
+    let gainNode = null;
+
+    const clockEl = document.getElementById('clock');
+    const alarmInput = document.getElementById('alarmTime');
+    const setBtn = document.getElementById('setBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const statusEl = document.getElementById('status');
+    const overlay = document.getElementById('overlay');
+    const overlayTime = document.getElementById('overlayTime');
+
+    function pad(n) {
+      return String(n).padStart(2, '0');
+    }
+
+    function tick() {
+      const now = new Date();
+      const h = pad(now.getHours());
+      const m = pad(now.getMinutes());
+      const s = pad(now.getSeconds());
+      clockEl.textContent = `${h}:${m}:${s}`;
+
+      if (alarmTime && !ringing) {
+        const current = `${h}:${m}`;
+        if (current === alarmTime && s === '00') {
+          ring();
+        }
+      }
+    }
+
+    function startSound() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0.3;
+      gainNode.connect(audioCtx.destination);
+
+      function beep() {
+        if (!ringing) return;
+        oscillator = audioCtx.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880;
+        oscillator.connect(gainNode);
+        oscillator.start();
+        setTimeout(() => {
+          if (oscillator) oscillator.stop();
+          if (ringing) setTimeout(beep, 400);
+        }, 300);
+      }
+      beep();
+    }
+
+    function ring() {
+      ringing = true;
+      overlay.classList.add('show');
+      overlayTime.textContent = alarmTime;
+      startSound();
+    }
+
+    function dismiss() {
+      ringing = false;
+      overlay.classList.remove('show');
+      if (oscillator) { try { oscillator.stop(); } catch(e) {} }
+      if (audioCtx) { audioCtx.close(); audioCtx = null; }
+      cancelAlarm();
+    }
+
+    function cancelAlarm() {
+      alarmTime = null;
+      setBtn.style.display = '';
+      cancelBtn.style.display = 'none';
+      statusEl.textContent = '';
+      statusEl.className = 'status';
+    }
+
+    setBtn.addEventListener('click', () => {
+      const val = alarmInput.value;
+      if (!val) return;
+      alarmTime = val;
+      setBtn.style.display = 'none';
+      cancelBtn.style.display = '';
+      statusEl.textContent = `${val} にアラームをセットしました`;
+      statusEl.className = 'status active';
+    });
+
+    cancelBtn.addEventListener('click', cancelAlarm);
+
+    setInterval(tick, 1000);
+    tick();
+  </script>
+</body>
+</html>
