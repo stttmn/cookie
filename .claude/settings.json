@@ -13,8 +13,7 @@
   },
   "mcpServers": {
     "playwright": {
-      "command": "npx",
-      "args": ["playwright", "mcp"]
+      "command": "playwright-mcp"
     }
   }
 }
