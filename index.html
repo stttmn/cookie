@@ -215,7 +215,150 @@
       dark: '#705848', steel: '#B8B8D0', fairy: '#EE99AC',
     };
 
+    const LOCAL_POKEMON = [
+      { id:1,   name:'bulbasaur',   types:['grass','poison'],   hp:45,  attack:49,  defense:49,  speed:45  },
+      { id:4,   name:'charmander',  types:['fire'],             hp:39,  attack:52,  defense:43,  speed:65  },
+      { id:7,   name:'squirtle',    types:['water'],            hp:44,  attack:48,  defense:65,  speed:43  },
+      { id:25,  name:'pikachu',     types:['electric'],         hp:35,  attack:55,  defense:40,  speed:90  },
+      { id:39,  name:'jigglypuff',  types:['normal','fairy'],   hp:115, attack:45,  defense:20,  speed:20  },
+      { id:52,  name:'meowth',      types:['normal'],           hp:40,  attack:45,  defense:35,  speed:90  },
+      { id:54,  name:'psyduck',     types:['water'],            hp:50,  attack:52,  defense:48,  speed:55  },
+      { id:63,  name:'abra',        types:['psychic'],          hp:25,  attack:20,  defense:15,  speed:90  },
+      { id:94,  name:'gengar',      types:['ghost','poison'],   hp:60,  attack:65,  defense:60,  speed:110 },
+      { id:113, name:'chansey',     types:['normal'],           hp:250, attack:5,   defense:5,   speed:50  },
+      { id:129, name:'magikarp',    types:['water'],            hp:20,  attack:10,  defense:55,  speed:80  },
+      { id:130, name:'gyarados',    types:['water','flying'],   hp:95,  attack:125, defense:79,  speed:81  },
+      { id:131, name:'lapras',      types:['water','ice'],      hp:130, attack:85,  defense:80,  speed:60  },
+      { id:133, name:'eevee',       types:['normal'],           hp:55,  attack:55,  defense:50,  speed:55  },
+      { id:143, name:'snorlax',     types:['normal'],           hp:160, attack:110, defense:65,  speed:30  },
+      { id:144, name:'articuno',    types:['ice','flying'],     hp:90,  attack:85,  defense:100, speed:85  },
+      { id:150, name:'mewtwo',      types:['psychic'],          hp:106, attack:110, defense:90,  speed:130 },
+      { id:151, name:'mew',         types:['psychic'],          hp:100, attack:100, defense:100, speed:100 },
+      { id:152, name:'chikorita',   types:['grass'],            hp:45,  attack:49,  defense:65,  speed:45  },
+      { id:155, name:'cyndaquil',   types:['fire'],             hp:39,  attack:52,  defense:43,  speed:65  },
+      { id:158, name:'totodile',    types:['water'],            hp:50,  attack:65,  defense:64,  speed:43  },
+      { id:175, name:'togepi',      types:['fairy'],            hp:35,  attack:20,  defense:65,  speed:20  },
+      { id:196, name:'espeon',      types:['psychic'],          hp:65,  attack:65,  defense:60,  speed:110 },
+      { id:197, name:'umbreon',     types:['dark'],             hp:95,  attack:65,  defense:110, speed:65  },
+      { id:212, name:'scizor',      types:['bug','steel'],      hp:70,  attack:130, defense:100, speed:65  },
+      { id:245, name:'suicune',     types:['water'],            hp:100, attack:75,  defense:115, speed:85  },
+      { id:248, name:'tyranitar',   types:['rock','dark'],      hp:100, attack:134, defense:110, speed:61  },
+      { id:249, name:'lugia',       types:['psychic','flying'], hp:106, attack:90,  defense:130, speed:110 },
+      { id:250, name:'ho-oh',       types:['fire','flying'],    hp:106, attack:130, defense:90,  speed:90  },
+      { id:252, name:'treecko',     types:['grass'],            hp:40,  attack:45,  defense:35,  speed:70  },
+      { id:255, name:'torchic',     types:['fire'],             hp:45,  attack:60,  defense:40,  speed:45  },
+      { id:258, name:'mudkip',      types:['water'],            hp:50,  attack:70,  defense:50,  speed:40  },
+      { id:282, name:'gardevoir',   types:['psychic','fairy'],  hp:68,  attack:65,  defense:65,  speed:80  },
+      { id:330, name:'flygon',      types:['ground','dragon'],  hp:80,  attack:100, defense:80,  speed:100 },
+      { id:359, name:'absol',       types:['dark'],             hp:65,  attack:130, defense:60,  speed:75  },
+      { id:376, name:'metagross',   types:['steel','psychic'],  hp:80,  attack:135, defense:130, speed:70  },
+      { id:380, name:'latias',      types:['dragon','psychic'], hp:80,  attack:80,  defense:90,  speed:110 },
+      { id:384, name:'rayquaza',    types:['dragon','flying'],  hp:105, attack:150, defense:90,  speed:95  },
+      { id:385, name:'jirachi',     types:['steel','psychic'],  hp:100, attack:100, defense:100, speed:100 },
+      { id:393, name:'piplup',      types:['water'],            hp:53,  attack:51,  defense:53,  speed:40  },
+      { id:447, name:'riolu',       types:['fighting'],         hp:40,  attack:70,  defense:40,  speed:60  },
+      { id:448, name:'lucario',     types:['fighting','steel'], hp:70,  attack:110, defense:70,  speed:90  },
+      { id:445, name:'garchomp',    types:['dragon','ground'],  hp:108, attack:130, defense:95,  speed:102 },
+      { id:468, name:'togekiss',    types:['fairy','flying'],   hp:85,  attack:50,  defense:95,  speed:80  },
+      { id:471, name:'glaceon',     types:['ice'],              hp:65,  attack:60,  defense:110, speed:65  },
+      { id:470, name:'leafeon',     types:['grass'],            hp:65,  attack:110, defense:130, speed:95  },
+      { id:479, name:'rotom',       types:['electric','ghost'], hp:50,  attack:50,  defense:77,  speed:91  },
+      { id:483, name:'dialga',      types:['steel','dragon'],   hp:100, attack:120, defense:120, speed:90  },
+      { id:484, name:'palkia',      types:['water','dragon'],   hp:90,  attack:120, defense:100, speed:100 },
+      { id:487, name:'giratina',    types:['ghost','dragon'],   hp:150, attack:100, defense:120, speed:90  },
+      { id:493, name:'arceus',      types:['normal'],           hp:120, attack:120, defense:120, speed:120 },
+      { id:495, name:'snivy',       types:['grass'],            hp:45,  attack:45,  defense:55,  speed:63  },
+      { id:501, name:'oshawott',    types:['water'],            hp:55,  attack:55,  defense:45,  speed:45  },
+      { id:571, name:'zoroark',     types:['dark'],             hp:60,  attack:105, defense:60,  speed:105 },
+      { id:596, name:'galvantula',  types:['bug','electric'],   hp:70,  attack:77,  defense:60,  speed:108 },
+      { id:609, name:'chandelure',  types:['ghost','fire'],     hp:60,  attack:55,  defense:90,  speed:80  },
+      { id:612, name:'haxorus',     types:['dragon'],           hp:76,  attack:147, defense:90,  speed:97  },
+      { id:641, name:'tornadus',    types:['flying'],           hp:79,  attack:115, defense:70,  speed:111 },
+      { id:644, name:'zekrom',      types:['dragon','electric'],hp:100, attack:150, defense:120, speed:90  },
+      { id:646, name:'kyurem',      types:['dragon','ice'],     hp:125, attack:130, defense:90,  speed:95  },
+      { id:658, name:'greninja',    types:['water','dark'],     hp:72,  attack:95,  defense:67,  speed:122 },
+      { id:700, name:'sylveon',     types:['fairy'],            hp:95,  attack:65,  defense:65,  speed:60  },
+      { id:716, name:'xerneas',     types:['fairy'],            hp:126, attack:131, defense:95,  speed:99  },
+      { id:717, name:'yveltal',     types:['dark','flying'],    hp:126, attack:131, defense:95,  speed:99  },
+      { id:718, name:'zygarde',     types:['dragon','ground'],  hp:108, attack:100, defense:121, speed:95  },
+      { id:725, name:'litten',      types:['fire'],             hp:45,  attack:65,  defense:40,  speed:70  },
+      { id:728, name:'popplio',     types:['water'],            hp:50,  attack:54,  defense:54,  speed:40  },
+      { id:745, name:'lycanroc',    types:['rock'],             hp:75,  attack:115, defense:65,  speed:112 },
+      { id:778, name:'mimikyu',     types:['ghost','fairy'],    hp:55,  attack:90,  defense:80,  speed:96  },
+      { id:785, name:'tapu koko',   types:['electric','fairy'], hp:70,  attack:115, defense:85,  speed:130 },
+      { id:800, name:'necrozma',    types:['psychic'],          hp:97,  attack:107, defense:101, speed:79  },
+      { id:802, name:'marshadow',   types:['fighting','ghost'], hp:90,  attack:125, defense:80,  speed:125 },
+      { id:810, name:'grookey',     types:['grass'],            hp:50,  attack:65,  defense:50,  speed:45  },
+      { id:816, name:'sobble',      types:['water'],            hp:50,  attack:40,  defense:40,  speed:70  },
+      { id:888, name:'zacian',      types:['fairy'],            hp:92,  attack:130, defense:115, speed:138 },
+      { id:889, name:'zamazenta',   types:['fighting'],         hp:92,  attack:130, defense:115, speed:138 },
+      { id:890, name:'eternatus',   types:['poison','dragon'],  hp:140, attack:85,  defense:95,  speed:130 },
+      { id:898, name:'calyrex',     types:['psychic','grass'],  hp:100, attack:80,  defense:80,  speed:80  },
+    ];
+
     const TOTAL_POKEMON = 1025;
+
+    function makeSvgSprite(primaryType) {
+      const c = TYPE_COLORS[primaryType] || '#888';
+      const svg = `<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="${c}" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="${c}" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="body" cx="40%" cy="35%" r="65%">
+            <stop offset="0%" stop-color="${c}ff"/>
+            <stop offset="100%" stop-color="${c}99"/>
+          </radialGradient>
+        </defs>
+        <circle cx="60" cy="60" r="58" fill="url(#bg)"/>
+        <circle cx="60" cy="44" r="28" fill="url(#body)"/>
+        <ellipse cx="60" cy="80" rx="34" ry="26" fill="url(#body)"/>
+        <circle cx="50" cy="40" r="6" fill="white"/>
+        <circle cx="70" cy="40" r="6" fill="white"/>
+        <circle cx="51" cy="40" r="3" fill="#1a1a2e"/>
+        <circle cx="71" cy="40" r="3" fill="#1a1a2e"/>
+        <circle cx="49" cy="37" r="1.8" fill="white" opacity="0.6"/>
+        <circle cx="69" cy="37" r="1.8" fill="white" opacity="0.6"/>
+        <path d="M54 53 Q60 58 66 53" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <ellipse cx="36" cy="54" rx="9" ry="6" fill="${c}" opacity="0.6" transform="rotate(-25 36 54)"/>
+        <ellipse cx="84" cy="54" rx="9" ry="6" fill="${c}" opacity="0.6" transform="rotate(25 84 54)"/>
+      </svg>`;
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    }
+
+    function showPokemon(data) {
+      const sprite = document.getElementById('sprite');
+      const pokeballIcon = document.querySelector('.pokeball-icon');
+      const nameEl = document.getElementById('name');
+      const numberEl = document.getElementById('number');
+      const typesEl = document.getElementById('types');
+      const statsEl = document.getElementById('stats');
+      const hint = document.getElementById('hint');
+
+      const spriteUrl = data.spriteUrl || makeSvgSprite(data.types[0]);
+      sprite.src = spriteUrl;
+      sprite.style.display = 'block';
+      pokeballIcon.style.display = 'none';
+
+      nameEl.textContent = data.name;
+      numberEl.textContent = `No. ${String(data.id).padStart(4, '0')}`;
+
+      typesEl.innerHTML = data.types.map(t => {
+        const color = TYPE_COLORS[t] || '#888';
+        return `<span class="type-badge" style="background:${color}">${t}</span>`;
+      }).join('');
+
+      const statMap = { hp: 'HP', attack: '攻撃', defense: '防御', speed: '素早さ' };
+      statsEl.innerHTML = ['hp', 'attack', 'defense', 'speed'].map(s => `
+        <div class="stat-item">
+          <div class="stat-label">${statMap[s]}</div>
+          <div class="stat-value">${data[s]}</div>
+        </div>
+      `).join('');
+
+      hint.textContent = 'もう一度クリックで次のポケモン';
+    }
 
     async function fetchRandomPokemon() {
       const card = document.getElementById('card');
@@ -243,46 +386,31 @@
       try {
         const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
         if (!res.ok) throw new Error('fetch failed');
-        const data = await res.json();
+        const apiData = await res.json();
 
         const spriteUrl =
-          data.sprites.other?.['official-artwork']?.front_default ||
-          data.sprites.front_default;
+          apiData.sprites.other?.['official-artwork']?.front_default ||
+          apiData.sprites.front_default;
 
         loading.style.display = 'none';
 
-        if (spriteUrl) {
-          sprite.src = spriteUrl;
-          sprite.style.display = 'block';
-        } else {
-          pokeballIcon.style.display = 'block';
-        }
+        const statValues = {};
+        apiData.stats.forEach(s => { statValues[s.stat.name] = s.base_stat; });
 
-        nameEl.textContent = data.name;
-        numberEl.textContent = `No. ${String(data.id).padStart(4, '0')}`;
-
-        typesEl.innerHTML = data.types.map(t => {
-          const color = TYPE_COLORS[t.type.name] || '#888';
-          return `<span class="type-badge" style="background:${color}">${t.type.name}</span>`;
-        }).join('');
-
-        const statMap = { hp: 'HP', attack: '攻撃', defense: '防御', speed: '素早さ', 'special-attack': '特攻', 'special-defense': '特防' };
-        const wantedStats = ['hp', 'attack', 'defense', 'speed'];
-        statsEl.innerHTML = data.stats
-          .filter(s => wantedStats.includes(s.stat.name))
-          .map(s => `
-            <div class="stat-item">
-              <div class="stat-label">${statMap[s.stat.name] || s.stat.name}</div>
-              <div class="stat-value">${s.base_stat}</div>
-            </div>
-          `).join('');
-
-        hint.textContent = 'もう一度クリックで次のポケモン';
+        showPokemon({
+          id: apiData.id,
+          name: apiData.name,
+          types: apiData.types.map(t => t.type.name),
+          spriteUrl,
+          hp: statValues.hp,
+          attack: statValues.attack,
+          defense: statValues.defense,
+          speed: statValues.speed,
+        });
       } catch (e) {
+        const local = LOCAL_POKEMON[Math.floor(Math.random() * LOCAL_POKEMON.length)];
         loading.style.display = 'none';
-        pokeballIcon.style.display = 'block';
-        nameEl.textContent = 'エラーが発生しました';
-        hint.textContent = 'クリックして再試行';
+        showPokemon(local);
       }
 
       card.style.pointerEvents = 'auto';
