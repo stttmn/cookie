@@ -151,14 +151,47 @@ const RecipeParser = (() => {
       }
     }
 
-    // タイトル: 指定 > 最初の行
+    // 「ピーマン4個、ツナ缶1缶、ごま油大さじ1…」のように
+    // 一文に材料が羅列される投稿(SNSキャプションに多い)へのフォールバック
+    if (recipe.ingredients.length === 0) {
+      recipe.ingredients = extractInlineIngredients(norm);
+    }
+
+    // タイトル: 指定 > 最初の行（「材料は〜」以降が続く場合はそこで切る）
     if (!recipe.title) {
-      const cand = preLines.find((l) => l.length >= 2 && l.length <= 60 && !QTY_RE.test(l) && !/^https?:/.test(l));
-      recipe.title = (cand || "無題のレシピ").replace(/[【】\[\]「」]/g, "").trim();
+      let t = preLines.find((l) => l.length >= 2 && l.length <= 60 && !QTY_RE.test(l) && !/^https?:/.test(l)) || "無題のレシピ";
+      const cut = t.split(/材料/)[0];
+      if (cut.trim().length >= 2) t = cut;
+      recipe.title = t.replace(/[【】\[\]「」]/g, "").replace(/[、。,．!！?？・〜~\s]+$/, "").trim() || "無題のレシピ";
     }
     if (!recipe.servings) recipe.servings = 2;
 
     return recipe;
+  }
+
+  // 文中に埋め込まれた「食材名+分量」のペアを抽出する
+  const INLINE_QTY_RE = /(?:大さじ|小さじ)\s*[0-9]+(?:[./][0-9]+)?|[0-9]+(?:[./][0-9]+)?\s*(?:g|kg|ml|cc|個|本|枚|玉|束|片|丁|缶|袋|パック|カップ|合|尾|切れ|かけ|株|杯)/g;
+  const NAME_LEAD_NOISE_RE = /^(?:材料は|材料|あとは|それと|そして|まず|次に|使うのは|今日は|と|は|が|の|も|に|を|で|や|、)+/;
+
+  function extractInlineIngredients(text) {
+    const found = [];
+    const seen = new Set();
+    let prevEnd = 0;
+    for (const m of text.matchAll(INLINE_QTY_RE)) {
+      // 直前の分量表現の終わり〜今回の分量の間が食材名の候補
+      const region = text.slice(Math.max(prevEnd, m.index - 25), m.index);
+      prevEnd = m.index + m[0].length;
+      const name = region
+        .split(/[、。，,．.!！?？\n\r\t #()（）「」【】]/).pop()
+        .replace(NAME_LEAD_NOISE_RE, "")
+        .trim();
+      if (!name || name.length > 12 || /^[0-9]+$/.test(name) || seen.has(name)) continue;
+      seen.add(name);
+      found.push({ name, qty: m[0].replace(/\s+/g, "") });
+      if (found.length >= 15) break;
+    }
+    // 2つ以上見つかった場合のみ材料として採用（誤検出を避ける）
+    return found.length >= 2 ? found : [];
   }
 
   // ---- HTML → JSON-LD (schema.org/Recipe) ----
@@ -251,6 +284,77 @@ const RecipeParser = (() => {
     const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     if (!m) return "";
     return decodeEntities(m[1]).split(/[|｜«»\-–—]/)[0].trim();
+  }
+
+  // ============================================================
+  // YouTube: 視聴ページから概要欄・字幕トラックを抽出
+  // ============================================================
+
+  // marker直後の { から対応する } までのJSONを括弧の対応を数えて切り出す
+  function extractJsonAfter(html, marker) {
+    const idx = html.indexOf(marker);
+    if (idx < 0) return null;
+    const start = html.indexOf("{", idx + marker.length);
+    if (start < 0) return null;
+    let depth = 0, inStr = false, escNext = false;
+    for (let i = start; i < html.length; i++) {
+      const c = html[i];
+      if (escNext) { escNext = false; continue; }
+      if (c === "\\") { escNext = true; continue; }
+      if (c === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (c === "{") depth++;
+      else if (c === "}") {
+        depth--;
+        if (depth === 0) {
+          try { return JSON.parse(html.slice(start, i + 1)); } catch { return null; }
+        }
+      }
+    }
+    return null;
+  }
+
+  // 視聴ページHTML → { title, description, author, captionTracks }
+  function youtubeFromWatchHtml(html) {
+    const pr = extractJsonAfter(html, "ytInitialPlayerResponse");
+    if (!pr) return null;
+    const vd = pr.videoDetails || {};
+    const tracks = ((pr.captions || {}).playerCaptionsTracklistRenderer || {}).captionTracks || [];
+    return {
+      title: vd.title || "",
+      description: vd.shortDescription || "",
+      author: vd.author || "",
+      captionTracks: tracks
+        .filter((t) => t.baseUrl)
+        .map((t) => ({ baseUrl: t.baseUrl, lang: t.languageCode || "", kind: t.kind || "" })),
+    };
+  }
+
+  // 字幕トラックから日本語(手動>自動)を優先して選ぶ
+  function pickCaptionTrack(tracks) {
+    if (!tracks || !tracks.length) return null;
+    const score = (t) =>
+      (t.lang.startsWith("ja") ? 4 : t.lang.startsWith("en") ? 2 : 1) + (t.kind === "asr" ? 0 : 1);
+    return [...tracks].sort((a, b) => score(b) - score(a))[0];
+  }
+
+  // 字幕データ(json3形式)→ 文字起こしテキスト
+  function transcriptFromJson3(data) {
+    const events = (data && data.events) || [];
+    const parts = [];
+    for (const ev of events) {
+      if (!ev.segs) continue;
+      const line = ev.segs.map((s) => s.utf8 || "").join("");
+      if (line.trim()) parts.push(line.trim());
+    }
+    // 音声認識字幕は句点がないことが多いので、行を読点区切りで結合
+    return parts.join(" ").replace(/\s+/g, " ").trim();
+  }
+
+  // 字幕データ(XML形式フォールバック)→ 文字起こしテキスト
+  function transcriptFromXml(xml) {
+    const texts = [...xml.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)].map((m) => decodeEntities(m[1]));
+    return texts.join(" ").replace(/\s+/g, " ").trim();
   }
 
   // ============================================================
@@ -407,6 +511,7 @@ const RecipeParser = (() => {
   return {
     normalize, detectPlatform, PLATFORM_LABEL,
     parseText, parseJsonLd, htmlToText, htmlTitle,
+    youtubeFromWatchHtml, pickCaptionTrack, transcriptFromJson3, transcriptFromXml,
     parseAmount, scaleQty, fmtNum,
     estimateCalories, guessRole, guessGenre, shopCategory, normalizeIngName,
     parseIngredientLine,

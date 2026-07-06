@@ -55,14 +55,16 @@
       </div>
       <div class="import-status" id="import-status"></div>
       <div class="mono-note">
-        🌐 <b>ウェブサイト</b>: レシピの構造化データや本文から材料・作り方を自動抽出します。<br>
-        📱 <b>SNS</b>: 投稿情報を取得後、下の欄にキャプション・概要欄を貼り付けると自動で文字起こしします。
+        ▶️ <b>YouTube</b>: 概要欄と字幕（動画音声の文字起こし）を自動取得してレシピ化します。<br>
+        🎵 <b>TikTok</b>: 投稿のキャプションを自動取得してレシピ化します。<br>
+        📸 <b>Instagram</b>: 公開投稿の取得を試みます（取得できない場合は貼り付けをご案内します）。<br>
+        🌐 <b>ウェブサイト</b>: レシピの構造化データや本文から材料・作り方を自動抽出します。
       </div>
     </div>
 
     <div class="card">
-      <h2 class="section" style="margin-top:0">投稿文・キャプションを文字起こし</h2>
-      <p class="hint">YouTubeの概要欄、Instagram・TikTokのキャプションなど、材料や作り方が書かれたテキストを貼り付けると、自動で「材料」「作り方」に構造化します。</p>
+      <h2 class="section" style="margin-top:0">テキストから文字起こし</h2>
+      <p class="hint">URL取り込みで自動取得できなかった場合はこちら。材料や作り方が書かれたテキストを貼り付けると、自動で「材料」「作り方」に構造化します。URL取り込みで取得した文字起こしもここに表示されます。</p>
       <label class="fld">テキストを貼り付け</label>
       <textarea id="import-text" rows="8" placeholder="例)
 とろとろ親子丼の作り方🐔

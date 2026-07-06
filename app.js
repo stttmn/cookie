@@ -259,19 +259,19 @@ function fetchWithTimeout(url, ms = 12000) {
 }
 
 // 直接fetch → CORS回避プロキシ → テキスト抽出サービスの順で試す
-async function fetchPage(url) {
+async function fetchPage(url, opts = {}) {
   const attempts = [
     { u: url, kind: "html" },
     { u: "https://api.allorigins.win/raw?url=" + encodeURIComponent(url), kind: "html" },
-    { u: "https://r.jina.ai/" + url, kind: "text" },
   ];
+  if (opts.jina !== false) attempts.push({ u: "https://r.jina.ai/" + url, kind: "text" });
   let lastErr;
   for (const a of attempts) {
     try {
       const res = await fetchWithTimeout(a.u);
       if (!res.ok) throw new Error("HTTP " + res.status);
       const body = await res.text();
-      if (body && body.length > 50) return { body, kind: a.kind };
+      if (body && body.length > (opts.minLength ?? 50)) return { body, kind: a.kind };
       throw new Error("empty");
     } catch (e) { lastErr = e; }
   }
@@ -325,22 +325,12 @@ document.getElementById("btn-import-url").addEventListener("click", async () => 
           setStatus("⚠️ ページからレシピを自動抽出できませんでした。\nページのレシピ部分をコピーして、下の貼り付け欄で文字起こしできます。", "err");
         }
       }
+    } else if (platform === "youtube") {
+      await importYouTube(url);
+    } else if (platform === "tiktok") {
+      await importTikTok(url);
     } else {
-      // SNS: oEmbedでタイトル・サムネイルを取得し、本文は貼り付けを促す
-      const meta = await fetchOEmbed(url);
-      if (platform === "youtube") {
-        const vid = youtubeId(url);
-        if (vid && !pendingMeta.image) pendingMeta.image = `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`;
-      }
-      if (meta) {
-        pendingMeta.title = meta.title || "";
-        pendingMeta.image = meta.thumbnail_url || pendingMeta.image || "";
-        pendingMeta.author = meta.author_name || "";
-        setStatus(`✅ 「${meta.title}」${meta.author_name ? ` (${meta.author_name})` : ""} を認識しました。\n投稿の説明文・キャプション（材料や作り方が書かれた部分）をコピーして、下の欄に貼り付けてください。自動で文字起こしします。`, "ok");
-      } else {
-        setStatus(`${P.PLATFORM_LABEL[platform]} のURLとして認識しました。\n投稿の説明文・キャプションをコピーして下の欄に貼り付けると、自動で材料と作り方に文字起こしします。`, "ok");
-      }
-      document.getElementById("import-text").focus();
+      await importInstagramOrX(url, platform);
     }
   } catch (e) {
     setStatus("⚠️ ページを取得できませんでした（ネットワーク制限またはサイト側の制限）。\nレシピのテキストをコピーして、下の貼り付け欄をご利用ください。", "err");
@@ -348,6 +338,135 @@ document.getElementById("btn-import-url").addEventListener("click", async () => 
     btn.disabled = false;
   }
 });
+
+// --- YouTube: 概要欄+字幕(=動画音声の文字起こし)を自動取得 ---
+async function importYouTube(url) {
+  const vid = youtubeId(url);
+  if (vid) pendingMeta.image = `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`;
+  setStatus("YouTubeから動画情報を取得中…");
+
+  let yt = null;
+  try {
+    const watchUrl = vid ? "https://www.youtube.com/watch?v=" + vid : url;
+    const { body } = await fetchPage(watchUrl, { jina: false, minLength: 5000 });
+    yt = P.youtubeFromWatchHtml(body);
+  } catch { /* 下のフォールバックへ */ }
+
+  if (!yt) {
+    const meta = await fetchOEmbed(url);
+    if (meta) {
+      pendingMeta.title = meta.title || "";
+      pendingMeta.image = meta.thumbnail_url || pendingMeta.image || "";
+      pendingMeta.author = meta.author_name || "";
+    }
+    setStatus("⚠️ 動画ページを自動取得できませんでした（通信環境やYouTube側の制限の可能性があります）。\n概要欄のテキストを下の欄に貼り付けてもらえれば文字起こしします。", "err");
+    document.getElementById("import-text").focus();
+    return;
+  }
+
+  pendingMeta.title = yt.title || "";
+  pendingMeta.author = yt.author || "";
+
+  // 1) 概要欄にレシピが書かれていれば、それが最も正確
+  if (yt.description) {
+    const fromDesc = P.parseText(yt.description, { title: yt.title });
+    if (fromDesc.ingredients.filter((i) => !i.group).length >= 2) {
+      setStatus(`✅ 「${yt.title}」の概要欄からレシピを自動抽出しました。内容を確認して保存してください。`, "ok");
+      finishImport(fromDesc);
+      return;
+    }
+  }
+
+  // 2) 字幕データ = 動画音声の文字起こしを取得
+  setStatus("概要欄にレシピが見つからないため、動画音声の文字起こし（字幕）を取得中…");
+  let transcript = "";
+  const track = P.pickCaptionTrack(yt.captionTracks);
+  if (track) {
+    try {
+      const capUrl = track.baseUrl + (track.baseUrl.includes("?") ? "&" : "?") + "fmt=json3";
+      const { body } = await fetchPage(capUrl, { jina: false, minLength: 20 });
+      try { transcript = P.transcriptFromJson3(JSON.parse(body)); }
+      catch { transcript = P.transcriptFromXml(body); }
+    } catch { /* 字幕なしとして続行 */ }
+  }
+
+  if (!transcript && !yt.description) {
+    setStatus("⚠️ この動画には概要欄のテキストも字幕もありませんでした。\nお手数ですが、レシピのテキストを下の欄に貼り付けてください。", "err");
+    return;
+  }
+
+  // 文字起こし全文をテキスト欄に表示（ユーザーが確認・編集できるように）
+  const combined = [
+    transcript ? "【動画音声の文字起こし】\n" + transcript : "",
+    yt.description ? "【概要欄】\n" + yt.description : "",
+  ].filter(Boolean).join("\n\n");
+  document.getElementById("import-text").value = combined;
+
+  const parsed = P.parseText([yt.description, transcript].filter(Boolean).join("\n\n"), { title: yt.title });
+  if (parsed.ingredients.filter((i) => !i.group).length >= 2) {
+    setStatus("✅ 動画の文字起こしからレシピを抽出しました。内容を確認して保存してください。", "ok");
+    finishImport(parsed);
+  } else {
+    setStatus("✅ 動画音声の文字起こしを取得し、下の欄に入れました。\n話し言葉のため材料の自動抽出はできませんでした。分量部分を残すように整えて「文字起こしする」を押してください。", "ok");
+    document.getElementById("import-text").focus();
+  }
+}
+
+// --- TikTok: oEmbedでキャプション(タイトル欄に全文が入る)を自動取得 ---
+async function importTikTok(url) {
+  setStatus("TikTokから投稿情報を取得中…");
+  let meta = null;
+  try {
+    const { body } = await fetchPage("https://www.tiktok.com/oembed?url=" + encodeURIComponent(url), { jina: false, minLength: 20 });
+    meta = JSON.parse(body);
+  } catch { /* noembedへ */ }
+  if (!meta || !meta.title) meta = await fetchOEmbed(url);
+
+  if (!meta || !meta.title) {
+    setStatus("⚠️ TikTokから投稿を自動取得できませんでした。\n投稿のキャプションをコピーして下の欄に貼り付けてください。文字起こしします。", "err");
+    document.getElementById("import-text").focus();
+    return;
+  }
+
+  pendingMeta.image = meta.thumbnail_url || "";
+  pendingMeta.author = meta.author_name || "";
+  const caption = meta.title;
+  document.getElementById("import-text").value = caption;
+
+  const parsed = P.parseText(caption);
+  if (parsed.ingredients.filter((i) => !i.group).length >= 2) {
+    setStatus("✅ キャプションからレシピを自動抽出しました。内容を確認して保存してください。", "ok");
+    finishImport(parsed);
+  } else {
+    setStatus("✅ キャプションを取得しました（下の欄）。材料が動画内にしか出てこない投稿のようです。\nTikTokは音声データを外部提供していないため、動画を見ながら下の欄に材料を書き足して「文字起こしする」を押してください。", "ok");
+    document.getElementById("import-text").focus();
+  }
+}
+
+// --- Instagram / X: 公開投稿ならテキスト抽出を試みる ---
+async function importInstagramOrX(url, platform) {
+  const label = P.PLATFORM_LABEL[platform];
+  setStatus(`${label}から投稿を取得中…`);
+  let text = "";
+  try {
+    const { body, kind } = await fetchPage(url, { minLength: 200 });
+    text = kind === "html" ? P.htmlToText(body) : body;
+  } catch { /* 取得失敗 */ }
+
+  // ログイン壁のページは除外
+  if (text && /ログインが必要|Log in to|Sign up|ログインして/i.test(text.slice(0, 600))) text = "";
+
+  if (text) {
+    const parsed = P.parseText(text.slice(0, 6000));
+    if (parsed.ingredients.filter((i) => !i.group).length >= 2) {
+      setStatus(`✅ ${label}の投稿からレシピを自動抽出しました。内容を確認して保存してください。`, "ok");
+      finishImport(parsed);
+      return;
+    }
+  }
+  setStatus(`⚠️ ${label}は外部からの自動取得を制限しているため、投稿を取得できませんでした。\nアプリでキャプションをコピー（︙メニュー→リンクをコピーの近くにあります）して、下の欄に貼り付けてください。自動で文字起こしします。`, "err");
+  document.getElementById("import-text").focus();
+}
 
 document.getElementById("btn-import-text").addEventListener("click", () => {
   const text = document.getElementById("import-text").value;
