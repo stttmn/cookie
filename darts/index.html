@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>ダーツの旅 🎯 — 行き先おまかせトラベルルーレット</title>
+  <meta name="description" content="ダーツを投げて次の旅行先を決めよう。世界または好きな国から、ランダムに行き先と観光情報をお届けします。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="hero">
+  <h1>🎯 ダーツの旅</h1>
+  <p>次の旅行先は、運まかせ。ダーツが刺さった場所へ出かけよう。</p>
+</header>
+
+<main>
+
+  <!-- 範囲えらび -->
+  <section class="scope-bar" aria-label="行き先の範囲">
+    <span class="scope-label">どこに投げる?</span>
+    <div class="scope-chips" id="scope-chips">
+      <button class="chip on" data-scope="world">🌍 世界</button>
+      <button class="chip" data-scope="日本">🇯🇵 日本</button>
+    </div>
+    <select id="country-select" aria-label="国を選ぶ">
+      <option value="">🌐 国を選ぶ…</option>
+    </select>
+  </section>
+
+  <!-- 地図 -->
+  <section class="map-wrap" id="map-wrap">
+    <canvas id="map"></canvas>
+    <div id="dart" class="dart" hidden>
+      <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+        <g transform="rotate(45 32 32)">
+          <rect x="30" y="6" width="4" height="30" rx="2" fill="#cfd8ea"/>
+          <polygon points="32,0 26,10 38,10" fill="#f75d92"/>
+          <polygon points="26,10 32,16 38,10 32,6" fill="#ff9ec0" opacity=".9"/>
+          <rect x="29" y="34" width="6" height="14" rx="3" fill="#ffc46b"/>
+          <polygon points="32,64 28,48 36,48" fill="#9aa7c4"/>
+        </g>
+      </svg>
+    </div>
+    <div class="map-hint" id="map-hint">下のボタンでダーツを投げてね</div>
+  </section>
+
+  <!-- 投げる -->
+  <div class="throw-area">
+    <button id="btn-throw" class="btn-throw">🎯 ダーツを投げる!</button>
+    <p class="throw-scope-note" id="scope-note">対象: 世界のすべての行き先</p>
+  </div>
+
+  <!-- 結果カード -->
+  <section id="result" class="result" hidden>
+    <div class="card">
+      <div class="card-head">
+        <div class="card-emoji" id="r-emoji">📍</div>
+        <div class="card-title">
+          <p class="r-catch" id="r-catch"></p>
+          <h2 id="r-name"></h2>
+          <p class="r-where" id="r-where"></p>
+        </div>
+      </div>
+      <p class="r-desc" id="r-desc"></p>
+      <div class="r-grid">
+        <div class="r-block">
+          <h3>📸 観光名所</h3>
+          <ul id="r-spots"></ul>
+        </div>
+        <div class="r-block">
+          <h3>🍴 名物グルメ</h3>
+          <ul id="r-food"></ul>
+        </div>
+        <div class="r-block">
+          <h3>🗓️ ベストシーズン</h3>
+          <p id="r-season"></p>
+        </div>
+        <div class="r-block">
+          <h3>💡 旅のヒント</h3>
+          <p id="r-tip"></p>
+        </div>
+      </div>
+      <div class="r-actions">
+        <a id="r-map-link" class="btn link" target="_blank" rel="noopener">🗺️ 地図で見る</a>
+        <a id="r-search-link" class="btn link" target="_blank" rel="noopener">🔍 観光情報を調べる</a>
+        <button id="btn-rethrow" class="btn accent">🎯 もう一回投げる</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 履歴 -->
+  <section class="history" id="history-wrap" hidden>
+    <h3>これまでの行き先</h3>
+    <div class="history-chips" id="history"></div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <p>収録: <span id="stat-count"></span>ヶ所(日本47都道府県+世界の名所) / 地図: Natural Earth</p>
+  <p><a href="../index.html">🍳 クックノートへ</a></p>
+</footer>
+
+<script src="landmask.js"></script>
+<script src="destinations-jp.js"></script>
+<script src="destinations-world.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
