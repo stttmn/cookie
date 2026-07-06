@@ -215,13 +215,33 @@ function draw(now) {
 /* ========== ダーツを投げる演出 ========== */
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function rouletteSpin(cands, finalDest) {
-  // だんだん減速しながら候補地をハイライト
-  const steps = Math.min(14, Math.max(8, cands.length));
-  for (let i = 0; i < steps; i++) {
-    const d = (i === steps - 1) ? finalDest : cands[Math.floor(Math.random() * cands.length)];
-    roulette = { mx: mapX(d.lon), my: mapY(d.lat) };
-    await sleep(55 + Math.pow(i / steps, 2.2) * 330);
+// ストップが押されるまで、候補地の間をターゲットが飛び回り続ける
+let stopRequested = false;
+
+async function spinUntilStop(cands) {
+  stopRequested = false;
+  let cur = cands[Math.floor(Math.random() * cands.length)];
+  roulette = { mx: mapX(cur.lon), my: mapY(cur.lat) };
+  const GLIDE = 110, DWELL = 80;
+  while (true) {
+    let next = cur;
+    if (cands.length > 1) {
+      while (next === cur) next = cands[Math.floor(Math.random() * cands.length)];
+    }
+    // ストップ後もいま向かっている場所までは滑らかに移動して、そこで確定
+    const from = { mx: mapX(cur.lon), my: mapY(cur.lat) };
+    const to = { mx: mapX(next.lon), my: mapY(next.lat) };
+    const t0 = performance.now();
+    while (true) {
+      const t = Math.min(1, (performance.now() - t0) / GLIDE);
+      roulette = { mx: from.mx + (to.mx - from.mx) * t, my: from.my + (to.my - from.my) * t };
+      if (t >= 1) break;
+      await sleep(16);
+    }
+    cur = next;
+    if (stopRequested) return cur;
+    await sleep(DWELL);
+    if (stopRequested) return cur;
   }
 }
 
@@ -252,24 +272,33 @@ async function flyDart(targetPx) {
   });
 }
 
+let spinning = false;
+
 async function throwDart() {
+  // スピン中にもう一度押されたら「ストップ!」
+  if (spinning) { stopRequested = true; return; }
   if (throwing) return;
   const cands = scopedDests();
   if (!cands.length) return;
   throwing = true;
-  btnThrow.disabled = true;
   resultEl.hidden = true;
   pulse = null;
-  currentDest = cands[Math.floor(Math.random() * cands.length)];
 
   // 全体表示に戻す
   hintEl.classList.remove("hide");
-  hintEl.textContent = "🎯 行き先を探しています…";
+  hintEl.textContent = "🎯 いいところで「ストップ!」を押してね";
   animateCamTo(0.5, 0.5, 1, 450);
   await sleep(470);
 
-  // ルーレット
-  await rouletteSpin(cands, currentDest);
+  // ストップが押されるまで回し続ける
+  spinning = true;
+  btnThrow.textContent = "✋ ストップ!";
+  btnThrow.classList.add("stop");
+  currentDest = await spinUntilStop(cands);
+  spinning = false;
+  btnThrow.textContent = "🎯 ダーツを投げる!";
+  btnThrow.classList.remove("stop");
+  btnThrow.disabled = true;
 
   // ダーツ発射!
   const tx = mapX(currentDest.lon), ty = mapY(currentDest.lat);
