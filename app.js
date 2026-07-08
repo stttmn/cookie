@@ -1,6 +1,6 @@
 /* =========================================================
- * app.js — カスタムガレージ本体
- * 状態管理・SVG合成・UI・ガチャ・ギャラリー・PNG書き出し
+ * app.js — カスタムガレージ（実車写真版）本体
+ * 検索 → 車えらび → カスタム → 保存/書き出し
  * ======================================================= */
 
 /* ---------- カラーユーティリティ ---------- */
@@ -21,314 +21,260 @@ function hexToHsl(hex) {
   }
   return [h, s * 100, l * 100];
 }
-function hsl(h, s, l) {
-  return `hsl(${((h % 360) + 360) % 360}, ${Math.max(0, Math.min(100, s))}%, ${Math.max(0, Math.min(100, l))}%)`;
-}
-function shade(hex, dl, ds = 0, dh = 0) {
-  const [h, s, l] = hexToHsl(hex);
-  return hsl(h + dh, s + ds, l + dl);
-}
 
 /* ---------- プリセット ---------- */
 const PAINTS = ['#e0342f', '#ff7a1a', '#ffce00', '#3fae4c', '#12b5b0', '#1f6ff2',
   '#7a4ff2', '#f261a8', '#f5f3ee', '#22252b', '#8b95a3', '#7a4a22'];
 const ACCENTS = ['#ffffff', '#20242c', '#ffce00', '#e0342f', '#1f6ff2', '#12b5b0', '#f261a8', '#ff7a1a'];
-const RIMS = ['#d9dee5', '#20242c', '#f2b641', '#c0392b', '#4aa3f0', '#b08bf5'];
 const GLOWS = ['#38f0ff', '#ff3fa4', '#7cff4f', '#b06bff'];
 const FINISHES = [
-  { id: 'solid', name: 'ソリッド', emoji: '🎨' },
-  { id: 'metallic', name: 'メタリック', emoji: '✨' },
+  { id: 'none', name: 'そのまま', emoji: '📷' },
+  { id: 'gloss', name: 'グロス', emoji: '✨' },
   { id: 'matte', name: 'マット', emoji: '🧱' },
-  { id: 'pearl', name: 'パール', emoji: '🫧' },
+];
+const DECALS = [
+  { id: 'none', name: 'なし', emoji: '🚫' },
+  { id: 'stripes', name: 'ストライプ', emoji: '🏁' },
+  { id: 'sideline', name: 'サイドライン', emoji: '➖' },
+  { id: 'flame', name: 'ファイア', emoji: '🔥' },
+  { id: 'dots', name: '水玉', emoji: '🎈' },
+  { id: 'bolt', name: 'サンダー', emoji: '⚡' },
+  { id: 'zekken', name: 'ゼッケン', emoji: '🎯' },
 ];
 
 /* ---------- 状態 ---------- */
 const state = {
-  car: 'sedan',
-  color: '#e0342f',
-  finish: 'metallic',
+  car: null,          // commonsSearch の結果1件 {title, large, page, artist, license, ...}
+  color: null,        // null = オリジナルカラー
+  strength: 0.85,
+  finish: 'none',
   decal: 'none',
   accent: '#ffffff',
-  wheel: 'sport',
-  rim: '#d9dee5',
-  tint: 35,
-  height: 0,       // -6(シャコタン)〜+10(リフトアップ)
-  spoiler: false,
-  roofbox: false,
-  underglow: false,
-  glow: '#38f0ff',
+  neon: null,
+  scale: 1,
+  lift: 0,
+  flip: false,
   scene: 'city',
-  driving: false,
   zekkenNo: 7,
+  driving: false,
 };
 
-/* ---------- SVG合成 ----------
- * ページ内に複数のSVG（ステージ+ギャラリー）を並べるため、
- * defsのidは uid で名前空間を分ける。
- */
-function paintDefs(color, finish, uid) {
-  if (finish === 'metallic') {
-    return `<linearGradient id="paint-${uid}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${shade(color, 16, 4)}"/>
-      <stop offset=".45" stop-color="${color}"/>
-      <stop offset="1" stop-color="${shade(color, -16)}"/>
-    </linearGradient>`;
-  }
-  if (finish === 'pearl') {
-    return `<linearGradient id="paint-${uid}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${shade(color, 22, 6, -28)}"/>
-      <stop offset=".5" stop-color="${color}"/>
-      <stop offset="1" stop-color="${shade(color, -10, 4, 26)}"/>
-    </linearGradient>`;
-  }
-  const c = finish === 'matte' ? shade(color, -6, -18) : color;
-  return `<linearGradient id="paint-${uid}" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="${c}"/>
-  </linearGradient>`;
+let carImg = null;        // HTMLImageElement
+let carAnalysis = null;   // {hasAlpha, bbox}
+let styledCar = null;     // {canvas, bbox, hasAlpha}
+let currentScene = null;
+let lastResults = [];     // ガチャの車替え用プール
+let rafId = null;
+let driveOffset = 0;
+
+const $ = sel => document.querySelector(sel);
+const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+
+/* ---------- 描画 ---------- */
+const canvas = () => $('#stage');
+
+function restyle() {
+  styledCar = carImg ? buildStyledCar(carImg, carAnalysis, state) : null;
 }
 
-function tintColor(t) {
-  // t: 0(素通し) 〜 100(スモーク)
-  const l = 82 - t * 0.72;
-  const s = 40 - t * 0.3;
-  return hsl(205, s, l);
+function draw(t = 0) {
+  if (!currentScene) return;
+  const ctx = canvas().getContext('2d');
+  composeStage(ctx, currentScene, styledCar, state, {
+    t, offset: driveOffset, driving: state.driving,
+  });
 }
 
-function carSVG(s, opts = {}) {
-  const uid = opts.uid || 'main';
-  const car = CARS.find(c => c.id === s.car);
-  const scene = sceneSVG(s.scene);
-  const sky = scene.sky
-    .replaceAll('id="sky"', `id="sky-${uid}"`)
-    .replaceAll('url(#sky)', `url(#sky-${uid})`);
-  const lift = -s.height; // 上方向が負
-  const glass = tintColor(s.tint);
-  const spin = s.driving && !opts.still;
-  const front = car.wheels[0], rear = car.wheels[car.wheels.length - 1];
-  const cx = (front.x + rear.x) / 2;
-  const halfW = (rear.x - front.x) / 2 + 60;
-  const glossOn = s.finish !== 'matte';
+function startDrive() {
+  cancelAnimationFrame(rafId);
+  let last = performance.now();
+  const loop = now => {
+    driveOffset += (now - last) * 0.22;
+    last = now;
+    draw(now);
+    rafId = requestAnimationFrame(loop);
+  };
+  rafId = requestAnimationFrame(loop);
+}
 
-  /* 走行モードのアニメーション */
-  const scrollAnim = spin
-    ? `<animateTransform attributeName="transform" type="translate" from="0 0" to="-560 0" dur="6s" repeatCount="indefinite"/>`
-    : '';
-  const dashAnim = spin
-    ? `<animateTransform attributeName="transform" type="translate" from="0 0" to="-80 0" dur="0.35s" repeatCount="indefinite"/>`
-    : '';
-  const bounceAnim = spin
-    ? `<animateTransform attributeName="transform" type="translate" values="0 ${lift};0 ${lift - 2};0 ${lift}" dur="0.5s" repeatCount="indefinite"/>`
-    : '';
+function stopDrive() {
+  cancelAnimationFrame(rafId);
+  rafId = null;
+  draw();
+}
 
-  /* 地面・道路 */
-  let ground = `<rect x="0" y="${GROUND_Y}" width="560" height="48" fill="${scene.groundColor}"/>`;
-  if (scene.road) {
-    ground += `<rect x="0" y="${GROUND_Y}" width="560" height="4" fill="rgba(255,255,255,.25)"/>
-      <g clip-path="url(#groundClip-${uid})"><g>${dashAnim}`;
-    for (let x = -80; x < 640; x += 80) {
-      ground += `<rect x="${x}" y="274" width="42" height="6" rx="3" fill="${scene.dashColor}" opacity=".85"/>`;
+async function setScene(id) {
+  state.scene = id;
+  currentScene = await loadScene(id);
+  draw();
+}
+
+/* ---------- 車のロード ---------- */
+async function selectCar(item) {
+  toast(`「${shortTitle(item.title)}」を読み込み中…`);
+  try {
+    const img = await loadCarImage(item.large);
+    carImg = img;
+    carAnalysis = analyzeImage(img);
+    state.car = item;
+    restyle();
+    draw();
+    updateUI();
+    if (!carAnalysis.hasAlpha) {
+      toast('この画像は切り抜きではないのでそのまま表示します。色替え・デカールには「切り抜き(PNG)」の画像がおすすめ！');
+    } else {
+      toast(`「${shortTitle(item.title)}」をステージにのせました！`);
     }
-    ground += `</g></g>`;
-  } else {
-    ground += `<rect x="0" y="${GROUND_Y}" width="560" height="5" fill="rgba(0,0,0,.15)"/>`;
+  } catch (e) {
+    toast('画像を読み込めませんでした。別の画像を試してみてください');
   }
-
-  /* デカール */
-  const decal = s.decal !== 'none'
-    ? `<g clip-path="url(#bodyClip-${uid})">${decalSVG(s.decal, s.accent, car, s.zekkenNo)}</g>`
-    : '';
-
-  /* パーツ */
-  let parts = '';
-  if (s.spoiler) {
-    parts += `<path d="${car.spoiler}" fill="${shade(s.color, -24)}" stroke="rgba(0,0,0,.35)" stroke-width="1.5"/>`;
-  }
-  if (s.roofbox) {
-    const r = car.roof;
-    const w = Math.min(150, r.x2 - r.x1 - 16);
-    const x = (r.x1 + r.x2) / 2 - w / 2;
-    parts += `<g>
-      <rect x="${x}" y="${r.y - 20}" width="${w}" height="18" rx="9" fill="#2b303a" stroke="rgba(0,0,0,.4)"/>
-      <rect x="${x + 8}" y="${r.y - 16}" width="${w - 16}" height="4" rx="2" fill="rgba(255,255,255,.2)"/>
-      <rect x="${x + w * 0.25}" y="${r.y - 4}" width="6" height="6" fill="#20242c"/>
-      <rect x="${x + w * 0.72}" y="${r.y - 4}" width="6" height="6" fill="#20242c"/>
-    </g>`;
-  }
-
-  /* アンダーグロウ */
-  const glow = s.underglow
-    ? `<ellipse cx="${cx}" cy="${car.bottom + 14 + lift}" rx="${halfW}" ry="12"
-         fill="${s.glow}" opacity=".75" filter="url(#blurGlow-${uid})"/>`
-    : '';
-
-  /* ヘッドライトビーム（ナイト×走行のお楽しみ） */
-  const beam = (s.scene === 'night' && spin)
-    ? `<path d="M 60 ${car.bottom - 46} L 0 ${car.bottom - 70} L 0 ${car.bottom - 6} L 60 ${car.bottom - 30} Z"
-        fill="#fff8c4" opacity=".35"/>`
-    : '';
-
-  const windows = car.windows.map(w =>
-    `<path d="${w}" fill="${glass}" stroke="rgba(20,28,40,.5)" stroke-width="2"/>`).join('');
-
-  const details = car.details.map(d =>
-    `<path d="${d}" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="2"/>`).join('');
-
-  const handles = (car.handles || []).map(([hx, hy]) =>
-    `<rect x="${hx}" y="${hy}" width="16" height="4.5" rx="2.2" fill="rgba(0,0,0,.35)"/>`).join('');
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 300" width="100%" height="100%" role="img" aria-label="カスタムした車のプレビュー">
-    <defs>
-      ${paintDefs(s.color, s.finish, uid)}
-      <clipPath id="bodyClip-${uid}"><path d="${car.body}"/></clipPath>
-      <clipPath id="groundClip-${uid}"><rect x="0" y="${GROUND_Y}" width="560" height="48"/></clipPath>
-      <filter id="blurGlow-${uid}" x="-50%" y="-50%" width="200%" height="200%">
-        <feGaussianBlur stdDeviation="7"/>
-      </filter>
-    </defs>
-
-    ${sky}
-    <g><g>${scrollAnim}<g>${scene.scroll}</g><g transform="translate(560,0)">${scene.scroll}</g></g></g>
-    ${ground}
-
-    <ellipse cx="${cx}" cy="${GROUND_Y + 8}" rx="${halfW + 20}" ry="11" fill="rgba(0,0,0,.3)"/>
-    ${glow}
-
-    <g transform="translate(0 ${lift})">${bounceAnim}
-      ${beam}
-      ${car.wheels.map(w => `<path d="M ${w.x - car.arch} ${car.bottom} A ${car.arch} ${car.arch} 0 0 1 ${w.x + car.arch} ${car.bottom} Z" fill="#12151b"/>`).join('')}
-      <path d="${car.mirror}" fill="${shade(s.color, -18)}" stroke="rgba(0,0,0,.3)" stroke-width="1.5"/>
-      ${parts}
-      <path d="${car.body}" fill="url(#paint-${uid})" stroke="rgba(10,14,20,.45)" stroke-width="2.5" stroke-linejoin="round"/>
-      ${decal}
-      <g clip-path="url(#bodyClip-${uid})">
-        <rect x="0" y="${car.bottom - 9}" width="560" height="24" fill="rgba(0,0,0,.2)"/>
-        ${glossOn ? `<path d="M 40 ${car.bottom - 44} Q 280 ${car.bottom - 66} 530 ${car.bottom - 48} L 530 ${car.bottom - 40} Q 280 ${car.bottom - 58} 40 ${car.bottom - 36} Z" fill="rgba(255,255,255,.28)"/>` : ''}
-      </g>
-      ${windows}
-      ${details}
-      ${handles}
-      <path d="${car.lights.head}" fill="#ffe9a3" stroke="rgba(0,0,0,.3)" stroke-width="1.5"/>
-      <path d="${car.lights.tail}" fill="#e6483d" stroke="rgba(0,0,0,.3)" stroke-width="1.5"/>
-    </g>
-
-    ${car.wheels.map(w => wheelSVG(w.x, w.r, s.wheel, s.rim, spin)).join('')}
-  </svg>`;
 }
 
-/* ---------- 愛車ネーム生成 ---------- */
-function carNickname(s) {
-  const [h, sat, l] = hexToHsl(s.color);
-  let colorWord;
-  if (l > 82) colorWord = '純白';
-  else if (l < 20) colorWord = '漆黒';
-  else if (sat < 18) colorWord = '銀灰';
-  else if (h < 18 || h >= 340) colorWord = '真紅';
-  else if (h < 42) colorWord = '蜜柑';
-  else if (h < 70) colorWord = '黄金';
-  else if (h < 160) colorWord = '若葉';
-  else if (h < 200) colorWord = '翡翠';
-  else if (h < 250) colorWord = '蒼空';
-  else if (h < 290) colorWord = '菫色';
-  else colorWord = '桜色';
+function shortTitle(t) {
+  return t.length > 28 ? t.slice(0, 28) + '…' : t;
+}
 
-  const carWord = {
-    sedan: '紳士', sports: '韋駄天', suv: '冒険者',
-    kei: 'ちびっこ', pickup: '力持ち', van: '旅がらす',
-  }[s.car];
+/* ---------- 検索 ---------- */
+async function doSearch(term) {
+  const grid = $('#results');
+  grid.innerHTML = '<p class="hint">🔍 さがしています…</p>';
+  try {
+    const pngOnly = $('#pngOnly').checked;
+    const results = await commonsSearch(term, { pngOnly });
+    lastResults = results;
+    if (!results.length) {
+      grid.innerHTML = '<p class="hint">見つかりませんでした。英語の車名（例: Nissan GT-R）や「切り抜きのみ」オフで試してみてください</p>';
+      return;
+    }
+    grid.innerHTML = results.map((r, i) => `
+      <button type="button" class="result-card" data-pick="${i}" title="${r.title}">
+        <span class="result-thumb"><img src="${r.thumb}" alt="${r.title}" loading="lazy"></span>
+        <span class="result-name">${shortTitle(r.title)}</span>
+      </button>`).join('');
+  } catch (e) {
+    grid.innerHTML = `<p class="hint">検索に失敗しました（${e.message}）。ネット接続を確認して再度お試しください</p>`;
+  }
+}
 
+/* ---------- 愛車ネーム ---------- */
+function carNickname() {
+  if (!state.car) return '';
+  let colorWord = '';
+  if (state.color) {
+    const [h, sat, l] = hexToHsl(state.color);
+    if (l > 82) colorWord = '純白の';
+    else if (l < 20) colorWord = '漆黒の';
+    else if (sat < 18) colorWord = '銀灰の';
+    else if (h < 18 || h >= 340) colorWord = '真紅の';
+    else if (h < 42) colorWord = '蜜柑の';
+    else if (h < 70) colorWord = '黄金の';
+    else if (h < 160) colorWord = '若葉の';
+    else if (h < 200) colorWord = '翡翠の';
+    else if (h < 250) colorWord = '蒼空の';
+    else if (h < 290) colorWord = '菫色の';
+    else colorWord = '桜色の';
+  }
   const flavor = {
     none: '', stripes: 'レーサー', sideline: 'スタイラー', flame: 'ファイア',
     dots: 'ポップ', bolt: 'サンダー', zekken: 'チャンプ',
-  }[s.decal];
-
-  return `${colorWord}の${carWord}${flavor ? '・' + flavor : ''}号`;
+  }[state.decal];
+  return `${colorWord}${shortTitle(state.car.title)}${flavor ? '・' + flavor : ''}号`;
 }
 
-/* ---------- UI 構築 ---------- */
-const $ = sel => document.querySelector(sel);
+/* ---------- UI ---------- */
+function buildStaticChoices() {
+  $('#quickChips').innerHTML = QUICK_CARS.map(c =>
+    `<button type="button" class="chip" data-quick="${c.q}">${c.label}</button>`).join('');
 
-function buildChoices() {
-  $('#carChips').innerHTML = CARS.map(c =>
-    `<button type="button" class="chip${state.car === c.id ? ' active' : ''}" data-car="${c.id}">
-       <span class="chip-emoji">${c.emoji}</span>${c.name}</button>`).join('');
-
-  $('#paintSwatches').innerHTML = PAINTS.map(p =>
-    `<button type="button" class="swatch${state.color === p ? ' active' : ''}" data-paint="${p}" style="--c:${p}" aria-label="ボディカラー ${p}"></button>`).join('');
+  $('#paintSwatches').innerHTML =
+    `<button type="button" class="chip small-chip${state.color === null ? ' active' : ''}" data-original="1">オリジナル</button>` +
+    PAINTS.map(p =>
+      `<button type="button" class="swatch${state.color === p ? ' active' : ''}" data-paint="${p}" style="--c:${p}" aria-label="ボディカラー ${p}"></button>`).join('');
 
   $('#finishChips').innerHTML = FINISHES.map(f =>
     `<button type="button" class="chip${state.finish === f.id ? ' active' : ''}" data-finish="${f.id}">
-       <span class="chip-emoji">${f.emoji}</span>${f.name}</button>`).join('');
+      <span class="chip-emoji">${f.emoji}</span>${f.name}</button>`).join('');
 
   $('#decalChips').innerHTML = DECALS.map(d =>
     `<button type="button" class="chip${state.decal === d.id ? ' active' : ''}" data-decal="${d.id}">
-       <span class="chip-emoji">${d.emoji}</span>${d.name}</button>`).join('');
+      <span class="chip-emoji">${d.emoji}</span>${d.name}</button>`).join('');
 
   $('#accentSwatches').innerHTML = ACCENTS.map(p =>
     `<button type="button" class="swatch small${state.accent === p ? ' active' : ''}" data-accent="${p}" style="--c:${p}" aria-label="デカール色 ${p}"></button>`).join('');
 
-  $('#wheelChips').innerHTML = WHEELS.map(w =>
-    `<button type="button" class="chip${state.wheel === w.id ? ' active' : ''}" data-wheel="${w.id}">
-       <span class="chip-emoji">${w.emoji}</span>${w.name}</button>`).join('');
-
-  $('#rimSwatches').innerHTML = RIMS.map(p =>
-    `<button type="button" class="swatch small${state.rim === p ? ' active' : ''}" data-rim="${p}" style="--c:${p}" aria-label="リム色 ${p}"></button>`).join('');
-
   $('#glowSwatches').innerHTML = GLOWS.map(p =>
-    `<button type="button" class="swatch small${state.glow === p ? ' active' : ''}" data-glow="${p}" style="--c:${p}" aria-label="ネオン色 ${p}"></button>`).join('');
+    `<button type="button" class="swatch small${state.neon === p ? ' active' : ''}" data-glow="${p}" style="--c:${p}" aria-label="ネオン色 ${p}"></button>`).join('');
 
   $('#sceneChips').innerHTML = SCENES.map(sc =>
     `<button type="button" class="chip${state.scene === sc.id ? ' active' : ''}" data-scene="${sc.id}">
-       <span class="chip-emoji">${sc.emoji}</span>${sc.name}</button>`).join('');
+      <span class="chip-emoji">${sc.emoji}</span>${sc.name}</button>`).join('');
 }
 
-function render() {
-  $('#stage').innerHTML = carSVG(state);
-  $('#carName').textContent = carNickname(state);
+function updateUI() {
+  buildStaticChoices();
+  $('#carName').textContent = state.car ? carNickname() : 'まだ車がえらばれていません';
   $('#driveBtn').classList.toggle('on', state.driving);
   $('#driveBtn').innerHTML = state.driving ? '🛑 とまる' : '🏁 はしる！';
-  $('#spoilerBtn').classList.toggle('on', state.spoiler);
-  $('#roofboxBtn').classList.toggle('on', state.roofbox);
-  $('#glowBtn').classList.toggle('on', state.underglow);
-  $('#glowSwatches').style.display = state.underglow ? '' : 'none';
+  $('#flipBtn').classList.toggle('on', state.flip);
+  $('#glowSwatches').style.display = state.neon ? '' : 'none';
+  $('#neonBtn').classList.toggle('on', !!state.neon);
   $('#accentRow').style.display = state.decal !== 'none' ? '' : 'none';
+  $('#strengthRow').style.display = state.color ? '' : 'none';
+
+  // クレジット表記
+  const cr = $('#credit');
+  if (state.car && state.car.page && state.car.page !== '#') {
+    cr.innerHTML = `画像: <a href="${state.car.page}" target="_blank" rel="noopener">${shortTitle(state.car.title)}</a>` +
+      `${state.car.artist ? '（' + state.car.artist + '）' : ''}${state.car.license ? ' / ' + state.car.license : ''} — Wikimedia Commons`;
+  } else if (state.car) {
+    cr.textContent = `画像: ${state.car.artist || ''}`;
+  } else {
+    cr.textContent = '';
+  }
+
+  // 不透明写真モードでは使えない機能を薄くする
+  const cutoutOnly = !!(carAnalysis && !carAnalysis.hasAlpha);
+  ['#paintBlock', '#decalBlock', '#partsBlock', '#sceneBlock'].forEach(sel => {
+    $(sel).classList.toggle('disabled', cutoutOnly);
+  });
 }
 
-function refresh() { buildChoices(); render(); }
-
 /* ---------- ガチャ ---------- */
-const rand = arr => arr[Math.floor(Math.random() * arr.length)];
-
-function gacha() {
-  state.car = rand(CARS).id;
-  state.color = rand(PAINTS);
+async function gacha() {
+  if (lastResults.length && Math.random() < 0.7) {
+    const pick = rand(lastResults);
+    if (!state.car || pick.large !== state.car.large) await selectCar(pick);
+  }
+  state.color = Math.random() < 0.8 ? rand(PAINTS) : null;
+  state.strength = 0.7 + Math.random() * 0.3;
   state.finish = rand(FINISHES).id;
   state.decal = rand(DECALS).id;
   state.accent = rand(ACCENTS);
-  state.wheel = rand(WHEELS).id;
-  state.rim = rand(RIMS);
+  state.neon = Math.random() < 0.3 ? rand(GLOWS) : null;
   state.scene = rand(SCENES).id;
-  state.tint = Math.floor(Math.random() * 90);
-  state.height = rand([-6, -4, 0, 0, 4, 8]);
-  state.spoiler = Math.random() < 0.4;
-  state.roofbox = Math.random() < 0.25;
-  state.underglow = Math.random() < 0.3;
-  state.glow = rand(GLOWS);
   state.zekkenNo = 1 + Math.floor(Math.random() * 98);
-  $('#tintRange').value = state.tint;
-  $('#heightRange').value = state.height;
-  refresh();
-  const stage = $('#stageWrap');
-  stage.classList.remove('shake');
-  void stage.offsetWidth; // reflowでアニメーションを再発火させる
-  stage.classList.add('shake');
+  state.flip = Math.random() < 0.3;
+  $('#strengthRange').value = Math.round(state.strength * 100);
+  await setScene(state.scene);
+  restyle();
+  draw();
+  updateUI();
+  const stageWrap = $('#stageWrap');
+  stageWrap.classList.remove('shake');
+  void stageWrap.offsetWidth;
+  stageWrap.classList.add('shake');
 }
 
 /* ---------- ギャラリー ---------- */
-const STORE_KEY = 'custom-garage-saves';
+const STORE_KEY = 'custom-garage-photo-saves';
 
 function loadSaves() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
   catch { return []; }
+}
+function persistSaves(saves) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(saves)); }
+  catch { toast('保存領域がいっぱいです。古い愛車を削除してください'); }
 }
 
 function renderGallery() {
@@ -343,9 +289,9 @@ function renderGallery() {
   }
   wrap.innerHTML = saves.map(sv => `
     <div class="garage-card">
-      <div class="thumb">${carSVG({ ...sv.config, driving: false }, { still: true, uid: 't' + sv.id })}</div>
+      <div class="thumb"><img src="${sv.snap}" alt="${sv.name}"></div>
       <div class="garage-meta">
-        <span class="garage-name">${sv.name}</span>
+        <span class="garage-name" title="${sv.name}">${sv.name}</span>
         <span class="garage-actions">
           <button type="button" class="mini-btn" data-load="${sv.id}">のせる</button>
           <button type="button" class="mini-btn del" data-del="${sv.id}" aria-label="削除">🗑</button>
@@ -354,45 +300,59 @@ function renderGallery() {
     </div>`).join('');
 }
 
+function snapshot() {
+  const c = document.createElement('canvas');
+  c.width = 280; c.height = 150;
+  c.getContext('2d').drawImage(canvas(), 0, 0, 280, 150);
+  return c.toDataURL('image/jpeg', 0.72);
+}
+
 function saveCurrent() {
+  if (!state.car) { toast('先に車をえらんでね！'); return; }
+  let snap;
+  try { snap = snapshot(); }
+  catch (e) { toast('この画像は保存用サムネイルを作れませんでした'); return; }
   const saves = loadSaves();
   saves.unshift({
     id: Date.now().toString(36),
-    name: carNickname(state),
+    name: carNickname(),
+    snap,
     config: { ...state, driving: false },
   });
-  localStorage.setItem(STORE_KEY, JSON.stringify(saves.slice(0, 24)));
+  persistSaves(saves.slice(0, 24));
   renderGallery();
-  toast(`「${carNickname(state)}」をガレージに保存しました！`);
+  toast(`「${carNickname()}」をガレージに保存しました！`);
+}
+
+async function loadSave(id) {
+  const sv = loadSaves().find(x => x.id === id);
+  if (!sv) return;
+  Object.assign(state, sv.config, { driving: false });
+  stopDrive();
+  $('#strengthRange').value = Math.round(state.strength * 100);
+  $('#scaleRange').value = Math.round(state.scale * 100);
+  $('#liftRange').value = state.lift;
+  await setScene(state.scene);
+  await selectCar(state.car);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ---------- PNG書き出し ---------- */
 function downloadPNG() {
-  const svgText = carSVG({ ...state, driving: false }, { still: true })
-    .replace('width="100%" height="100%"', 'width="1120" height="600"');
-  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1120; canvas.height = 600;
-    canvas.getContext('2d').drawImage(img, 0, 0, 1120, 600);
-    URL.revokeObjectURL(url);
-    canvas.toBlob(blob => {
-      const pngUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = pngUrl;
-      // 日本語ファイル名は環境により落ちるためASCII安全な名前にする
-      a.download = `custom-garage-${state.car}-${Date.now().toString(36)}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(pngUrl), 4000);
-      toast('PNG画像を保存しました！');
-    }, 'image/png');
-  };
-  img.onerror = () => { URL.revokeObjectURL(url); toast('画像の書き出しに失敗しました…'); };
-  img.src = url;
+  if (!state.car) { toast('先に車をえらんでね！'); return; }
+  const credit = state.car.page && state.car.page !== '#'
+    ? `photo: ${(state.car.artist || 'Wikimedia Commons').slice(0, 40)} / ${state.car.license || ''} (Wikimedia Commons)`
+    : '';
+  let dataUrl;
+  try { dataUrl = exportStagePNG(canvas(), credit); }
+  catch (e) { toast('画像の書き出しに失敗しました…'); return; }
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = `custom-garage-${Date.now().toString(36)}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  toast('PNG画像を保存しました！');
 }
 
 /* ---------- トースト ---------- */
@@ -402,20 +362,33 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
 }
 
 /* ---------- イベント ---------- */
-function init() {
-  buildChoices();
-  render();
-  renderGallery();
+function wire() {
+  $('#searchForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const q = $('#searchInput').value.trim();
+    if (q) doSearch(q);
+  });
 
-  $('#controls').addEventListener('click', e => {
+  $('#picker').addEventListener('click', e => {
+    const quick = e.target.closest('[data-quick]');
+    if (quick) {
+      $('#searchInput').value = quick.dataset.quick;
+      doSearch(quick.dataset.quick);
+      return;
+    }
+    const pick = e.target.closest('[data-pick]');
+    if (pick) selectCar(lastResults[+pick.dataset.pick]);
+  });
+
+  $('#controls').addEventListener('click', async e => {
     const b = e.target.closest('button');
     if (!b) return;
     const d = b.dataset;
-    if (d.car) state.car = d.car;
+    if (d.original) state.color = null;
     else if (d.paint) state.color = d.paint;
     else if (d.finish) state.finish = d.finish;
     else if (d.decal) {
@@ -423,46 +396,69 @@ function init() {
       if (d.decal === 'zekken') state.zekkenNo = 1 + Math.floor(Math.random() * 98);
     }
     else if (d.accent) state.accent = d.accent;
-    else if (d.wheel) state.wheel = d.wheel;
-    else if (d.rim) state.rim = d.rim;
-    else if (d.glow) state.glow = d.glow;
-    else if (d.scene) state.scene = d.scene;
-    else if (b.id === 'spoilerBtn') state.spoiler = !state.spoiler;
-    else if (b.id === 'roofboxBtn') state.roofbox = !state.roofbox;
-    else if (b.id === 'glowBtn') state.underglow = !state.underglow;
+    else if (d.glow) state.neon = d.glow;
+    else if (d.scene) { await setScene(d.scene); updateUI(); return; }
+    else if (b.id === 'neonBtn') state.neon = state.neon ? null : GLOWS[0];
+    else if (b.id === 'flipBtn') state.flip = !state.flip;
     else return;
-    refresh();
+    restyle();
+    draw();
+    updateUI();
   });
 
-  $('#paintPicker').addEventListener('input', e => { state.color = e.target.value; refresh(); });
-  $('#accentPicker').addEventListener('input', e => { state.accent = e.target.value; refresh(); });
-  $('#tintRange').addEventListener('input', e => { state.tint = +e.target.value; render(); });
-  $('#heightRange').addEventListener('input', e => { state.height = +e.target.value; render(); });
+  $('#paintPicker').addEventListener('input', e => {
+    state.color = e.target.value;
+    restyle(); draw(); updateUI();
+  });
+  $('#accentPicker').addEventListener('input', e => {
+    state.accent = e.target.value;
+    restyle(); draw(); updateUI();
+  });
+  $('#strengthRange').addEventListener('input', e => {
+    state.strength = +e.target.value / 100;
+    restyle(); draw();
+  });
+  $('#scaleRange').addEventListener('input', e => {
+    state.scale = +e.target.value / 100;
+    draw();
+  });
+  $('#liftRange').addEventListener('input', e => {
+    state.lift = +e.target.value;
+    draw();
+  });
 
   $('#gachaBtn').addEventListener('click', gacha);
-  $('#driveBtn').addEventListener('click', () => { state.driving = !state.driving; render(); });
+  $('#driveBtn').addEventListener('click', () => {
+    state.driving = !state.driving;
+    if (state.driving) startDrive(); else stopDrive();
+    updateUI();
+  });
   $('#saveBtn').addEventListener('click', saveCurrent);
   $('#pngBtn').addEventListener('click', downloadPNG);
 
   $('#gallery').addEventListener('click', e => {
     const load = e.target.closest('[data-load]');
     const del = e.target.closest('[data-del]');
-    if (load) {
-      const sv = loadSaves().find(x => x.id === load.dataset.load);
-      if (sv) {
-        Object.assign(state, sv.config, { driving: false });
-        $('#tintRange').value = state.tint;
-        $('#heightRange').value = state.height;
-        refresh();
-        toast(`「${sv.name}」をステージにのせました！`);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    } else if (del) {
-      const saves = loadSaves().filter(x => x.id !== del.dataset.del);
-      localStorage.setItem(STORE_KEY, JSON.stringify(saves));
+    if (load) loadSave(load.dataset.load);
+    else if (del) {
+      persistSaves(loadSaves().filter(x => x.id !== del.dataset.del));
       renderGallery();
     }
   });
+}
+
+/* ---------- 起動 ---------- */
+async function init() {
+  buildStaticChoices();
+  updateUI();
+  renderGallery();
+  wire();
+  await setScene(state.scene);
+  draw();
+  // 最初のおすすめ検索
+  const first = QUICK_CARS[0];
+  $('#searchInput').value = first.q;
+  doSearch(first.q);
 }
 
 document.addEventListener('DOMContentLoaded', init);

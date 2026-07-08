@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>🚗 カスタムガレージ — 車の外装アレンジで遊ぼう！</title>
-  <meta name="description" content="いろんな車の外装を自由にアレンジして遊べるサイト。カラー・ホイール・デカール・背景を選んで、あなただけの一台を作ろう！">
+  <title>🚗 カスタムガレージ — 実車写真でドレスアップ！</title>
+  <meta name="description" content="好きな実在の車を検索して選び、色替え・デカール・背景で自由にアレンジして遊べるサイト。">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>">
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -12,18 +12,38 @@
 
   <header class="site-header">
     <h1>🔧 カスタム<span>ガレージ</span></h1>
-    <p class="tagline">好きな車を、好きなだけドレスアップ。あなただけの一台を作ろう！</p>
+    <p class="tagline">本物の車の写真で、好きなだけドレスアップ。あなたの推し車をえらぼう！</p>
   </header>
 
   <main>
-    <!-- ステージ -->
+    <!-- 1. 車えらび -->
+    <section class="picker-section" id="picker">
+      <h2>🚘 STEP1 — 好きな車をさがす</h2>
+      <form id="searchForm" class="search-form">
+        <input type="search" id="searchInput" placeholder="車名で検索（例: Nissan GT-R / Toyota Supra）" autocomplete="off">
+        <button type="submit" class="action-btn search-btn">🔍 さがす</button>
+      </form>
+      <div class="chip-row" id="quickChips"></div>
+      <label class="png-toggle">
+        <input type="checkbox" id="pngOnly" checked>
+        切り抜き画像のみ（色替え・デカールが使える）
+      </label>
+      <div class="results" id="results">
+        <p class="hint">🔍 さがしています…</p>
+      </div>
+      <p class="hint small">画像はフリー百科事典の画像庫 Wikimedia Commons から取得します。英語の車名で探すとヒットしやすいよ。</p>
+    </section>
+
+    <!-- 2. ステージ -->
     <section class="stage-section">
+      <h2>🎨 STEP2 — カスタムする</h2>
       <div class="stage-wrap" id="stageWrap">
-        <div class="stage" id="stage" aria-live="polite"></div>
+        <canvas class="stage" id="stage" width="1120" height="600"></canvas>
         <div class="name-plate">
           <span class="name-label">愛車ネーム</span>
-          <strong id="carName"></strong>
+          <strong id="carName">まだ車がえらばれていません</strong>
         </div>
+        <p class="credit" id="credit"></p>
       </div>
       <div class="action-bar">
         <button type="button" id="gachaBtn" class="action-btn gacha">🎰 おまかせガチャ</button>
@@ -33,15 +53,10 @@
       </div>
     </section>
 
-    <!-- コントロールパネル -->
+    <!-- 3. コントロールパネル -->
     <section class="panel" id="controls">
 
-      <div class="panel-block">
-        <h2>🚘 車種をえらぶ</h2>
-        <div class="chip-row" id="carChips"></div>
-      </div>
-
-      <div class="panel-block">
+      <div class="panel-block" id="paintBlock">
         <h2>🎨 ボディカラー</h2>
         <div class="swatch-row">
           <span id="paintSwatches" class="swatches"></span>
@@ -50,11 +65,15 @@
             <span>＋自由な色</span>
           </label>
         </div>
-        <h3>塗装の仕上げ</h3>
+        <div class="slider-row" id="strengthRow">
+          <label for="strengthRange">🖌️ 色のこさ</label>
+          <input type="range" id="strengthRange" min="30" max="100" value="85">
+        </div>
+        <h3>質感</h3>
         <div class="chip-row" id="finishChips"></div>
       </div>
 
-      <div class="panel-block">
+      <div class="panel-block" id="decalBlock">
         <h2>🏷️ デカール</h2>
         <div class="chip-row" id="decalChips"></div>
         <div class="swatch-row" id="accentRow">
@@ -67,41 +86,31 @@
         </div>
       </div>
 
-      <div class="panel-block">
-        <h2>🛞 ホイール</h2>
-        <div class="chip-row" id="wheelChips"></div>
-        <div class="swatch-row">
-          <span class="row-label">リム色</span>
-          <span id="rimSwatches" class="swatches"></span>
-        </div>
-      </div>
-
-      <div class="panel-block">
-        <h2>🔩 パーツ &amp; セッティング</h2>
+      <div class="panel-block" id="partsBlock">
+        <h2>🔩 セッティング</h2>
         <div class="chip-row">
-          <button type="button" id="spoilerBtn" class="chip toggle"><span class="chip-emoji">🪽</span>スポイラー</button>
-          <button type="button" id="roofboxBtn" class="chip toggle"><span class="chip-emoji">🧳</span>ルーフボックス</button>
-          <button type="button" id="glowBtn" class="chip toggle"><span class="chip-emoji">💡</span>ネオン</button>
+          <button type="button" id="neonBtn" class="chip toggle"><span class="chip-emoji">💡</span>ネオン</button>
           <span id="glowSwatches" class="swatches"></span>
+          <button type="button" id="flipBtn" class="chip toggle"><span class="chip-emoji">🔄</span>左右反転</button>
         </div>
         <div class="slider-row">
-          <label for="tintRange">🪟 窓のスモーク</label>
-          <input type="range" id="tintRange" min="0" max="100" value="35">
+          <label for="scaleRange">📏 大きさ</label>
+          <input type="range" id="scaleRange" min="55" max="140" value="100">
         </div>
         <div class="slider-row">
-          <label for="heightRange">📏 車高（シャコタン⇄リフトアップ）</label>
-          <input type="range" id="heightRange" min="-6" max="10" step="2" value="0">
+          <label for="liftRange">↕️ 上下の位置</label>
+          <input type="range" id="liftRange" min="-40" max="20" value="0">
         </div>
       </div>
 
-      <div class="panel-block">
+      <div class="panel-block" id="sceneBlock">
         <h2>🌆 背景ステージ</h2>
         <div class="chip-row" id="sceneChips"></div>
       </div>
 
     </section>
 
-    <!-- ギャラリー -->
+    <!-- 4. ギャラリー -->
     <section class="gallery-section">
       <h2>🏠 マイガレージ <span id="galleryCount" class="count"></span></h2>
       <div class="gallery" id="gallery"></div>
@@ -109,13 +118,14 @@
   </main>
 
   <footer class="site-footer">
-    <p>🚗 カスタムガレージ — データはこのブラウザの中だけに保存されます。思う存分カスタムしてOK！</p>
+    <p>🚗 カスタムガレージ — 車の写真は <a href="https://commons.wikimedia.org/" target="_blank" rel="noopener">Wikimedia Commons</a> のフリー画像を利用しています。各画像のライセンスはステージ下のリンクから確認できます。保存データはこのブラウザの中だけ。</p>
   </footer>
 
   <div id="toast" class="toast" role="status"></div>
 
-  <script src="cars.js"></script>
   <script src="scenes.js"></script>
+  <script src="commons.js"></script>
+  <script src="engine.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
