@@ -1,691 +1,468 @@
-// ============================================================
-// app.js — クックノート本体
-// レシピ保存 / SNS・ウェブ取り込み / 献立提案 / 買い物メモ
-// ============================================================
+/* =========================================================
+ * app.js — カスタムガレージ本体
+ * 状態管理・SVG合成・UI・ガチャ・ギャラリー・PNG書き出し
+ * ======================================================= */
 
-/* global RecipeParser, SAMPLE_RECIPES, RICE_KCAL_PER_SERVING */
-
-const P = RecipeParser;
-const LS_KEYS = { recipes: "cooknote.recipes", plan: "cooknote.plan", shopping: "cooknote.shopping", init: "cooknote.initialized" };
-
-function load(key, fallback) {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
-}
-function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-// ---- 状態 ----
-let recipes = load(LS_KEYS.recipes, []);
-let plan = load(LS_KEYS.plan, null);
-let shopping = load(LS_KEYS.shopping, []);
-
-// 初回はサンプルレシピを投入
-if (!localStorage.getItem(LS_KEYS.init)) {
-  if (recipes.length === 0) {
-    recipes = SAMPLE_RECIPES.map((r) => ({ ...r, id: uid(), source: "サンプル", url: "", image: "", createdAt: Date.now() }));
-    save(LS_KEYS.recipes, recipes);
+/* ---------- カラーユーティリティ ---------- */
+function hexToHsl(hex) {
+  const m = hex.replace('#', '');
+  const r = parseInt(m.slice(0, 2), 16) / 255;
+  const g = parseInt(m.slice(2, 4), 16) / 255;
+  const b = parseInt(m.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+    else if (max === g) h = ((b - r) / d + 2) * 60;
+    else h = ((r - g) / d + 4) * 60;
   }
-  localStorage.setItem(LS_KEYS.init, "1");
+  return [h, s * 100, l * 100];
+}
+function hsl(h, s, l) {
+  return `hsl(${((h % 360) + 360) % 360}, ${Math.max(0, Math.min(100, s))}%, ${Math.max(0, Math.min(100, l))}%)`;
+}
+function shade(hex, dl, ds = 0, dh = 0) {
+  const [h, s, l] = hexToHsl(hex);
+  return hsl(h + dh, s + ds, l + dl);
 }
 
-function persistRecipes() { save(LS_KEYS.recipes, recipes); }
-function persistPlan() { save(LS_KEYS.plan, plan); }
-function persistShopping() { save(LS_KEYS.shopping, shopping); }
+/* ---------- プリセット ---------- */
+const PAINTS = ['#e0342f', '#ff7a1a', '#ffce00', '#3fae4c', '#12b5b0', '#1f6ff2',
+  '#7a4ff2', '#f261a8', '#f5f3ee', '#22252b', '#8b95a3', '#7a4a22'];
+const ACCENTS = ['#ffffff', '#20242c', '#ffce00', '#e0342f', '#1f6ff2', '#12b5b0', '#f261a8', '#ff7a1a'];
+const RIMS = ['#d9dee5', '#20242c', '#f2b641', '#c0392b', '#4aa3f0', '#b08bf5'];
+const GLOWS = ['#38f0ff', '#ff3fa4', '#7cff4f', '#b06bff'];
+const FINISHES = [
+  { id: 'solid', name: 'ソリッド', emoji: '🎨' },
+  { id: 'metallic', name: 'メタリック', emoji: '✨' },
+  { id: 'matte', name: 'マット', emoji: '🧱' },
+  { id: 'pearl', name: 'パール', emoji: '🫧' },
+];
 
-// ---- toast ----
+/* ---------- 状態 ---------- */
+const state = {
+  car: 'sedan',
+  color: '#e0342f',
+  finish: 'metallic',
+  decal: 'none',
+  accent: '#ffffff',
+  wheel: 'sport',
+  rim: '#d9dee5',
+  tint: 35,
+  height: 0,       // -6(シャコタン)〜+10(リフトアップ)
+  spoiler: false,
+  roofbox: false,
+  underglow: false,
+  glow: '#38f0ff',
+  scene: 'city',
+  driving: false,
+  zekkenNo: 7,
+};
+
+/* ---------- SVG合成 ----------
+ * ページ内に複数のSVG（ステージ+ギャラリー）を並べるため、
+ * defsのidは uid で名前空間を分ける。
+ */
+function paintDefs(color, finish, uid) {
+  if (finish === 'metallic') {
+    return `<linearGradient id="paint-${uid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${shade(color, 16, 4)}"/>
+      <stop offset=".45" stop-color="${color}"/>
+      <stop offset="1" stop-color="${shade(color, -16)}"/>
+    </linearGradient>`;
+  }
+  if (finish === 'pearl') {
+    return `<linearGradient id="paint-${uid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${shade(color, 22, 6, -28)}"/>
+      <stop offset=".5" stop-color="${color}"/>
+      <stop offset="1" stop-color="${shade(color, -10, 4, 26)}"/>
+    </linearGradient>`;
+  }
+  const c = finish === 'matte' ? shade(color, -6, -18) : color;
+  return `<linearGradient id="paint-${uid}" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="${c}"/>
+  </linearGradient>`;
+}
+
+function tintColor(t) {
+  // t: 0(素通し) 〜 100(スモーク)
+  const l = 82 - t * 0.72;
+  const s = 40 - t * 0.3;
+  return hsl(205, s, l);
+}
+
+function carSVG(s, opts = {}) {
+  const uid = opts.uid || 'main';
+  const car = CARS.find(c => c.id === s.car);
+  const scene = sceneSVG(s.scene);
+  const sky = scene.sky
+    .replaceAll('id="sky"', `id="sky-${uid}"`)
+    .replaceAll('url(#sky)', `url(#sky-${uid})`);
+  const lift = -s.height; // 上方向が負
+  const glass = tintColor(s.tint);
+  const spin = s.driving && !opts.still;
+  const front = car.wheels[0], rear = car.wheels[car.wheels.length - 1];
+  const cx = (front.x + rear.x) / 2;
+  const halfW = (rear.x - front.x) / 2 + 60;
+  const glossOn = s.finish !== 'matte';
+
+  /* 走行モードのアニメーション */
+  const scrollAnim = spin
+    ? `<animateTransform attributeName="transform" type="translate" from="0 0" to="-560 0" dur="6s" repeatCount="indefinite"/>`
+    : '';
+  const dashAnim = spin
+    ? `<animateTransform attributeName="transform" type="translate" from="0 0" to="-80 0" dur="0.35s" repeatCount="indefinite"/>`
+    : '';
+  const bounceAnim = spin
+    ? `<animateTransform attributeName="transform" type="translate" values="0 ${lift};0 ${lift - 2};0 ${lift}" dur="0.5s" repeatCount="indefinite"/>`
+    : '';
+
+  /* 地面・道路 */
+  let ground = `<rect x="0" y="${GROUND_Y}" width="560" height="48" fill="${scene.groundColor}"/>`;
+  if (scene.road) {
+    ground += `<rect x="0" y="${GROUND_Y}" width="560" height="4" fill="rgba(255,255,255,.25)"/>
+      <g clip-path="url(#groundClip-${uid})"><g>${dashAnim}`;
+    for (let x = -80; x < 640; x += 80) {
+      ground += `<rect x="${x}" y="274" width="42" height="6" rx="3" fill="${scene.dashColor}" opacity=".85"/>`;
+    }
+    ground += `</g></g>`;
+  } else {
+    ground += `<rect x="0" y="${GROUND_Y}" width="560" height="5" fill="rgba(0,0,0,.15)"/>`;
+  }
+
+  /* デカール */
+  const decal = s.decal !== 'none'
+    ? `<g clip-path="url(#bodyClip-${uid})">${decalSVG(s.decal, s.accent, car, s.zekkenNo)}</g>`
+    : '';
+
+  /* パーツ */
+  let parts = '';
+  if (s.spoiler) {
+    parts += `<path d="${car.spoiler}" fill="${shade(s.color, -24)}" stroke="rgba(0,0,0,.35)" stroke-width="1.5"/>`;
+  }
+  if (s.roofbox) {
+    const r = car.roof;
+    const w = Math.min(150, r.x2 - r.x1 - 16);
+    const x = (r.x1 + r.x2) / 2 - w / 2;
+    parts += `<g>
+      <rect x="${x}" y="${r.y - 20}" width="${w}" height="18" rx="9" fill="#2b303a" stroke="rgba(0,0,0,.4)"/>
+      <rect x="${x + 8}" y="${r.y - 16}" width="${w - 16}" height="4" rx="2" fill="rgba(255,255,255,.2)"/>
+      <rect x="${x + w * 0.25}" y="${r.y - 4}" width="6" height="6" fill="#20242c"/>
+      <rect x="${x + w * 0.72}" y="${r.y - 4}" width="6" height="6" fill="#20242c"/>
+    </g>`;
+  }
+
+  /* アンダーグロウ */
+  const glow = s.underglow
+    ? `<ellipse cx="${cx}" cy="${car.bottom + 14 + lift}" rx="${halfW}" ry="12"
+         fill="${s.glow}" opacity=".75" filter="url(#blurGlow-${uid})"/>`
+    : '';
+
+  /* ヘッドライトビーム（ナイト×走行のお楽しみ） */
+  const beam = (s.scene === 'night' && spin)
+    ? `<path d="M 60 ${car.bottom - 46} L 0 ${car.bottom - 70} L 0 ${car.bottom - 6} L 60 ${car.bottom - 30} Z"
+        fill="#fff8c4" opacity=".35"/>`
+    : '';
+
+  const windows = car.windows.map(w =>
+    `<path d="${w}" fill="${glass}" stroke="rgba(20,28,40,.5)" stroke-width="2"/>`).join('');
+
+  const details = car.details.map(d =>
+    `<path d="${d}" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="2"/>`).join('');
+
+  const handles = (car.handles || []).map(([hx, hy]) =>
+    `<rect x="${hx}" y="${hy}" width="16" height="4.5" rx="2.2" fill="rgba(0,0,0,.35)"/>`).join('');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 300" width="100%" height="100%" role="img" aria-label="カスタムした車のプレビュー">
+    <defs>
+      ${paintDefs(s.color, s.finish, uid)}
+      <clipPath id="bodyClip-${uid}"><path d="${car.body}"/></clipPath>
+      <clipPath id="groundClip-${uid}"><rect x="0" y="${GROUND_Y}" width="560" height="48"/></clipPath>
+      <filter id="blurGlow-${uid}" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="7"/>
+      </filter>
+    </defs>
+
+    ${sky}
+    <g><g>${scrollAnim}<g>${scene.scroll}</g><g transform="translate(560,0)">${scene.scroll}</g></g></g>
+    ${ground}
+
+    <ellipse cx="${cx}" cy="${GROUND_Y + 8}" rx="${halfW + 20}" ry="11" fill="rgba(0,0,0,.3)"/>
+    ${glow}
+
+    <g transform="translate(0 ${lift})">${bounceAnim}
+      ${beam}
+      ${car.wheels.map(w => `<path d="M ${w.x - car.arch} ${car.bottom} A ${car.arch} ${car.arch} 0 0 1 ${w.x + car.arch} ${car.bottom} Z" fill="#12151b"/>`).join('')}
+      <path d="${car.mirror}" fill="${shade(s.color, -18)}" stroke="rgba(0,0,0,.3)" stroke-width="1.5"/>
+      ${parts}
+      <path d="${car.body}" fill="url(#paint-${uid})" stroke="rgba(10,14,20,.45)" stroke-width="2.5" stroke-linejoin="round"/>
+      ${decal}
+      <g clip-path="url(#bodyClip-${uid})">
+        <rect x="0" y="${car.bottom - 9}" width="560" height="24" fill="rgba(0,0,0,.2)"/>
+        ${glossOn ? `<path d="M 40 ${car.bottom - 44} Q 280 ${car.bottom - 66} 530 ${car.bottom - 48} L 530 ${car.bottom - 40} Q 280 ${car.bottom - 58} 40 ${car.bottom - 36} Z" fill="rgba(255,255,255,.28)"/>` : ''}
+      </g>
+      ${windows}
+      ${details}
+      ${handles}
+      <path d="${car.lights.head}" fill="#ffe9a3" stroke="rgba(0,0,0,.3)" stroke-width="1.5"/>
+      <path d="${car.lights.tail}" fill="#e6483d" stroke="rgba(0,0,0,.3)" stroke-width="1.5"/>
+    </g>
+
+    ${car.wheels.map(w => wheelSVG(w.x, w.r, s.wheel, s.rim, spin)).join('')}
+  </svg>`;
+}
+
+/* ---------- 愛車ネーム生成 ---------- */
+function carNickname(s) {
+  const [h, sat, l] = hexToHsl(s.color);
+  let colorWord;
+  if (l > 82) colorWord = '純白';
+  else if (l < 20) colorWord = '漆黒';
+  else if (sat < 18) colorWord = '銀灰';
+  else if (h < 18 || h >= 340) colorWord = '真紅';
+  else if (h < 42) colorWord = '蜜柑';
+  else if (h < 70) colorWord = '黄金';
+  else if (h < 160) colorWord = '若葉';
+  else if (h < 200) colorWord = '翡翠';
+  else if (h < 250) colorWord = '蒼空';
+  else if (h < 290) colorWord = '菫色';
+  else colorWord = '桜色';
+
+  const carWord = {
+    sedan: '紳士', sports: '韋駄天', suv: '冒険者',
+    kei: 'ちびっこ', pickup: '力持ち', van: '旅がらす',
+  }[s.car];
+
+  const flavor = {
+    none: '', stripes: 'レーサー', sideline: 'スタイラー', flame: 'ファイア',
+    dots: 'ポップ', bolt: 'サンダー', zekken: 'チャンプ',
+  }[s.decal];
+
+  return `${colorWord}の${carWord}${flavor ? '・' + flavor : ''}号`;
+}
+
+/* ---------- UI 構築 ---------- */
+const $ = sel => document.querySelector(sel);
+
+function buildChoices() {
+  $('#carChips').innerHTML = CARS.map(c =>
+    `<button type="button" class="chip${state.car === c.id ? ' active' : ''}" data-car="${c.id}">
+       <span class="chip-emoji">${c.emoji}</span>${c.name}</button>`).join('');
+
+  $('#paintSwatches').innerHTML = PAINTS.map(p =>
+    `<button type="button" class="swatch${state.color === p ? ' active' : ''}" data-paint="${p}" style="--c:${p}" aria-label="ボディカラー ${p}"></button>`).join('');
+
+  $('#finishChips').innerHTML = FINISHES.map(f =>
+    `<button type="button" class="chip${state.finish === f.id ? ' active' : ''}" data-finish="${f.id}">
+       <span class="chip-emoji">${f.emoji}</span>${f.name}</button>`).join('');
+
+  $('#decalChips').innerHTML = DECALS.map(d =>
+    `<button type="button" class="chip${state.decal === d.id ? ' active' : ''}" data-decal="${d.id}">
+       <span class="chip-emoji">${d.emoji}</span>${d.name}</button>`).join('');
+
+  $('#accentSwatches').innerHTML = ACCENTS.map(p =>
+    `<button type="button" class="swatch small${state.accent === p ? ' active' : ''}" data-accent="${p}" style="--c:${p}" aria-label="デカール色 ${p}"></button>`).join('');
+
+  $('#wheelChips').innerHTML = WHEELS.map(w =>
+    `<button type="button" class="chip${state.wheel === w.id ? ' active' : ''}" data-wheel="${w.id}">
+       <span class="chip-emoji">${w.emoji}</span>${w.name}</button>`).join('');
+
+  $('#rimSwatches').innerHTML = RIMS.map(p =>
+    `<button type="button" class="swatch small${state.rim === p ? ' active' : ''}" data-rim="${p}" style="--c:${p}" aria-label="リム色 ${p}"></button>`).join('');
+
+  $('#glowSwatches').innerHTML = GLOWS.map(p =>
+    `<button type="button" class="swatch small${state.glow === p ? ' active' : ''}" data-glow="${p}" style="--c:${p}" aria-label="ネオン色 ${p}"></button>`).join('');
+
+  $('#sceneChips').innerHTML = SCENES.map(sc =>
+    `<button type="button" class="chip${state.scene === sc.id ? ' active' : ''}" data-scene="${sc.id}">
+       <span class="chip-emoji">${sc.emoji}</span>${sc.name}</button>`).join('');
+}
+
+function render() {
+  $('#stage').innerHTML = carSVG(state);
+  $('#carName').textContent = carNickname(state);
+  $('#driveBtn').classList.toggle('on', state.driving);
+  $('#driveBtn').innerHTML = state.driving ? '🛑 とまる' : '🏁 はしる！';
+  $('#spoilerBtn').classList.toggle('on', state.spoiler);
+  $('#roofboxBtn').classList.toggle('on', state.roofbox);
+  $('#glowBtn').classList.toggle('on', state.underglow);
+  $('#glowSwatches').style.display = state.underglow ? '' : 'none';
+  $('#accentRow').style.display = state.decal !== 'none' ? '' : 'none';
+}
+
+function refresh() { buildChoices(); render(); }
+
+/* ---------- ガチャ ---------- */
+const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+
+function gacha() {
+  state.car = rand(CARS).id;
+  state.color = rand(PAINTS);
+  state.finish = rand(FINISHES).id;
+  state.decal = rand(DECALS).id;
+  state.accent = rand(ACCENTS);
+  state.wheel = rand(WHEELS).id;
+  state.rim = rand(RIMS);
+  state.scene = rand(SCENES).id;
+  state.tint = Math.floor(Math.random() * 90);
+  state.height = rand([-6, -4, 0, 0, 4, 8]);
+  state.spoiler = Math.random() < 0.4;
+  state.roofbox = Math.random() < 0.25;
+  state.underglow = Math.random() < 0.3;
+  state.glow = rand(GLOWS);
+  state.zekkenNo = 1 + Math.floor(Math.random() * 98);
+  $('#tintRange').value = state.tint;
+  $('#heightRange').value = state.height;
+  refresh();
+  const stage = $('#stageWrap');
+  stage.classList.remove('shake');
+  void stage.offsetWidth; // reflowでアニメーションを再発火させる
+  stage.classList.add('shake');
+}
+
+/* ---------- ギャラリー ---------- */
+const STORE_KEY = 'custom-garage-saves';
+
+function loadSaves() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+  catch { return []; }
+}
+
+function renderGallery() {
+  const saves = loadSaves();
+  const wrap = $('#gallery');
+  const count = $('#galleryCount');
+  count.textContent = saves.length ? `${saves.length}台` : '';
+  count.style.display = saves.length ? '' : 'none';
+  if (!saves.length) {
+    wrap.innerHTML = '<p class="empty">まだ保存された愛車はありません。「💾 ガレージに保存」でコレクションしよう！</p>';
+    return;
+  }
+  wrap.innerHTML = saves.map(sv => `
+    <div class="garage-card">
+      <div class="thumb">${carSVG({ ...sv.config, driving: false }, { still: true, uid: 't' + sv.id })}</div>
+      <div class="garage-meta">
+        <span class="garage-name">${sv.name}</span>
+        <span class="garage-actions">
+          <button type="button" class="mini-btn" data-load="${sv.id}">のせる</button>
+          <button type="button" class="mini-btn del" data-del="${sv.id}" aria-label="削除">🗑</button>
+        </span>
+      </div>
+    </div>`).join('');
+}
+
+function saveCurrent() {
+  const saves = loadSaves();
+  saves.unshift({
+    id: Date.now().toString(36),
+    name: carNickname(state),
+    config: { ...state, driving: false },
+  });
+  localStorage.setItem(STORE_KEY, JSON.stringify(saves.slice(0, 24)));
+  renderGallery();
+  toast(`「${carNickname(state)}」をガレージに保存しました！`);
+}
+
+/* ---------- PNG書き出し ---------- */
+function downloadPNG() {
+  const svgText = carSVG({ ...state, driving: false }, { still: true })
+    .replace('width="100%" height="100%"', 'width="1120" height="600"');
+  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1120; canvas.height = 600;
+    canvas.getContext('2d').drawImage(img, 0, 0, 1120, 600);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(blob => {
+      const pngUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      // 日本語ファイル名は環境により落ちるためASCII安全な名前にする
+      a.download = `custom-garage-${state.car}-${Date.now().toString(36)}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(pngUrl), 4000);
+      toast('PNG画像を保存しました！');
+    }, 'image/png');
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('画像の書き出しに失敗しました…'); };
+  img.src = url;
+}
+
+/* ---------- トースト ---------- */
 let toastTimer;
 function toast(msg) {
-  const el = document.getElementById("toast");
-  el.textContent = msg;
-  el.classList.add("show");
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-// ---- タブ ----
-function switchTab(name) {
-  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
-  document.querySelectorAll("nav.tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-  window.scrollTo(0, 0);
-}
-document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+/* ---------- イベント ---------- */
+function init() {
+  buildChoices();
+  render();
+  renderGallery();
 
-// ============================================================
-// レシピ一覧
-// ============================================================
-let filterCat = "すべて";
-
-function recipeKcalLabel(r) {
-  const est = P.estimateCalories(r);
-  if (!est.perServing || est.coverage < 0.3) return "";
-  return `約${est.perServing}kcal/人`;
-}
-
-function renderRecipes() {
-  const q = document.getElementById("search").value.trim().toLowerCase();
-  const grid = document.getElementById("recipe-grid");
-  const list = recipes
-    .filter((r) => filterCat === "すべて" || r.category === filterCat)
-    .filter((r) => {
-      if (!q) return true;
-      const hay = (r.title + " " + (r.tags || []).join(" ") + " " + (r.ingredients || []).map((i) => i.name).join(" ")).toLowerCase();
-      return hay.includes(q);
-    })
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-  document.getElementById("recipe-count").textContent = `${recipes.length}件保存中`;
-
-  if (list.length === 0) {
-    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><span class="big">🍳</span>レシピがありません。<br>「取り込み」タブからSNSやウェブサイトのレシピを追加できます。</div>`;
-    return;
-  }
-  grid.innerHTML = list.map((r) => {
-    const kcal = recipeKcalLabel(r);
-    return `<div class="recipe-card" data-id="${r.id}">
-      ${r.image ? `<img class="thumb" src="${esc(r.image)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
-      <h3>${esc(r.title)}</h3>
-      <div class="meta">
-        <span class="chip cat-${esc(r.category)}">${esc(r.category)}</span>
-        ${r.genre && r.genre !== "その他" ? `<span class="chip tag">${esc(r.genre)}</span>` : ""}
-        ${r.source && r.source !== "手入力" ? `<span class="chip src">${esc(r.source)}</span>` : ""}
-        ${(r.tags || []).slice(0, 2).map((t) => `<span class="chip tag">#${esc(t)}</span>`).join("")}
-        ${kcal ? `<span class="kcal">🔥 ${kcal}</span>` : ""}
-      </div>
-    </div>`;
-  }).join("");
-
-  grid.querySelectorAll(".recipe-card").forEach((c) => c.addEventListener("click", () => openDetail(c.dataset.id)));
-}
-
-document.getElementById("search").addEventListener("input", renderRecipes);
-document.querySelectorAll("#cat-filter button").forEach((b) =>
-  b.addEventListener("click", () => {
-    filterCat = b.dataset.cat;
-    document.querySelectorAll("#cat-filter button").forEach((x) => x.classList.toggle("on", x === b));
-    renderRecipes();
-  })
-);
-
-// ============================================================
-// レシピ詳細モーダル
-// ============================================================
-let detailServings = 2;
-
-function openDetail(id) {
-  const r = recipes.find((x) => x.id === id);
-  if (!r) return;
-  detailServings = r.servings || 2;
-  renderDetail(r);
-  document.getElementById("modal-detail").classList.add("open");
-}
-
-function renderDetail(r) {
-  const factor = detailServings / (r.servings || detailServings || 1);
-  const est = P.estimateCalories(r);
-  const kcalTxt = est.perServing && est.coverage >= 0.3 ? `🔥 1人あたり 約${est.perServing}kcal（推定）` : "";
-
-  document.getElementById("detail-body").innerHTML = `
-    <h3>${esc(r.title)}</h3>
-    <div class="meta" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
-      <span class="chip cat-${esc(r.category)}">${esc(r.category)}</span>
-      ${r.genre && r.genre !== "その他" ? `<span class="chip tag">${esc(r.genre)}</span>` : ""}
-      ${r.source ? `<span class="chip src">${esc(r.source)}</span>` : ""}
-      ${(r.tags || []).map((t) => `<span class="chip tag">#${esc(t)}</span>`).join("")}
-    </div>
-    ${r.image ? `<img class="detail-thumb" src="${esc(r.image)}" alt="" onerror="this.remove()">` : ""}
-    <p class="hint" style="margin-top:8px">${kcalTxt}</p>
-
-    <div style="display:flex;align-items:center;gap:10px;margin:14px 0 4px">
-      <strong style="font-size:0.9rem">材料</strong>
-      <div class="serv-ctrl">
-        <button id="serv-minus">−</button>
-        <span>${detailServings}人分</span>
-        <button id="serv-plus">＋</button>
-      </div>
-    </div>
-    <table class="ing-table">
-      ${(r.ingredients || []).map((i) => i.group
-        ? `<tr class="grp"><td colspan="2">▼ ${esc(i.name)}</td></tr>`
-        : `<tr><td>${esc(i.name)}</td><td class="qty">${esc(P.scaleQty(i.qty, factor))}</td></tr>`).join("")}
-    </table>
-
-    <strong style="font-size:0.9rem;display:block;margin-top:14px">作り方</strong>
-    <ol class="steps-list">${(r.steps || []).map((s) => `<li><span>${esc(s)}</span></li>`).join("")}</ol>
-
-    ${r.notes ? `<div class="mono-note">${esc(r.notes)}</div>` : ""}
-    ${r.url ? `<p style="margin-top:10px;font-size:0.8rem">元の投稿: <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a></p>` : ""}
-
-    <div class="row" style="margin-top:18px">
-      <button class="btn green" id="d-shop">🛒 買い物リストへ</button>
-      <button class="btn ghost" id="d-edit">✏️ 編集</button>
-      <button class="btn danger" id="d-del">削除</button>
-    </div>`;
-
-  document.getElementById("serv-minus").onclick = () => { if (detailServings > 1) { detailServings--; renderDetail(r); } };
-  document.getElementById("serv-plus").onclick = () => { if (detailServings < 20) { detailServings++; renderDetail(r); } };
-  document.getElementById("d-edit").onclick = () => { closeModals(); openEditor(r); };
-  document.getElementById("d-del").onclick = () => {
-    if (confirm(`「${r.title}」を削除しますか？`)) {
-      recipes = recipes.filter((x) => x.id !== r.id);
-      persistRecipes(); renderRecipes(); closeModals();
-      toast("削除しました");
+  $('#controls').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const d = b.dataset;
+    if (d.car) state.car = d.car;
+    else if (d.paint) state.color = d.paint;
+    else if (d.finish) state.finish = d.finish;
+    else if (d.decal) {
+      state.decal = d.decal;
+      if (d.decal === 'zekken') state.zekkenNo = 1 + Math.floor(Math.random() * 98);
     }
-  };
-  document.getElementById("d-shop").onclick = () => {
-    addRecipeToShopping(r, detailServings);
-    toast(`「${r.title}」(${detailServings}人分)の材料を買い物リストに追加しました`);
-  };
-}
+    else if (d.accent) state.accent = d.accent;
+    else if (d.wheel) state.wheel = d.wheel;
+    else if (d.rim) state.rim = d.rim;
+    else if (d.glow) state.glow = d.glow;
+    else if (d.scene) state.scene = d.scene;
+    else if (b.id === 'spoilerBtn') state.spoiler = !state.spoiler;
+    else if (b.id === 'roofboxBtn') state.roofbox = !state.roofbox;
+    else if (b.id === 'glowBtn') state.underglow = !state.underglow;
+    else return;
+    refresh();
+  });
 
-// ============================================================
-// エディタ（新規・編集・取り込みプレビュー共通）
-// ============================================================
-function openEditor(r) {
-  const isNew = !r || !r.id;
-  document.getElementById("editor-title").textContent = isNew ? (r && r.title ? "取り込み結果の確認" : "レシピを手入力") : "レシピを編集";
-  document.getElementById("e-id").value = r && r.id ? r.id : "";
-  document.getElementById("e-title").value = (r && r.title) || "";
-  document.getElementById("e-cat").value = (r && r.category) || "主菜";
-  document.getElementById("e-genre").value = (r && r.genre) || "その他";
-  document.getElementById("e-serv").value = (r && r.servings) || 2;
-  document.getElementById("e-tags").value = ((r && r.tags) || []).join(", ");
-  document.getElementById("e-url").value = (r && r.url) || "";
-  document.getElementById("e-source").value = (r && r.source) || "手入力";
-  document.getElementById("e-image").value = (r && r.image) || "";
-  document.getElementById("e-notes").value = (r && r.notes) || "";
-  document.getElementById("e-ings").value = ((r && r.ingredients) || [])
-    .map((i) => (i.group ? `【${i.name}】` : `${i.name} ${i.qty || ""}`.trim())).join("\n");
-  document.getElementById("e-steps").value = ((r && r.steps) || []).join("\n");
-  document.getElementById("modal-editor").classList.add("open");
-}
+  $('#paintPicker').addEventListener('input', e => { state.color = e.target.value; refresh(); });
+  $('#accentPicker').addEventListener('input', e => { state.accent = e.target.value; refresh(); });
+  $('#tintRange').addEventListener('input', e => { state.tint = +e.target.value; render(); });
+  $('#heightRange').addEventListener('input', e => { state.height = +e.target.value; render(); });
 
-document.getElementById("editor-save").addEventListener("click", () => {
-  const title = document.getElementById("e-title").value.trim();
-  if (!title) { toast("料理名を入力してください"); return; }
+  $('#gachaBtn').addEventListener('click', gacha);
+  $('#driveBtn').addEventListener('click', () => { state.driving = !state.driving; render(); });
+  $('#saveBtn').addEventListener('click', saveCurrent);
+  $('#pngBtn').addEventListener('click', downloadPNG);
 
-  const ingredients = document.getElementById("e-ings").value.split("\n")
-    .map((l) => l.trim()).filter(Boolean)
-    .map((l) => {
-      const g = l.match(/^[【\[]\s*(.+?)\s*[】\]]$/);
-      if (g) return { name: g[1], qty: "", group: true };
-      return P.parseIngredientLine(P.normalize(l)) || { name: l, qty: "" };
-    });
-  const steps = document.getElementById("e-steps").value.split("\n").map((l) => l.trim()).filter(Boolean);
-  const tags = document.getElementById("e-tags").value.split(/[,、]/).map((t) => t.trim().replace(/^#/, "")).filter(Boolean);
-
-  const data = {
-    title,
-    category: document.getElementById("e-cat").value,
-    genre: document.getElementById("e-genre").value,
-    servings: Math.max(1, parseInt(document.getElementById("e-serv").value, 10) || 2),
-    tags, ingredients, steps,
-    url: document.getElementById("e-url").value.trim(),
-    source: document.getElementById("e-source").value.trim() || "手入力",
-    image: document.getElementById("e-image").value.trim(),
-    notes: document.getElementById("e-notes").value.trim(),
-  };
-
-  const id = document.getElementById("e-id").value;
-  if (id) {
-    const idx = recipes.findIndex((x) => x.id === id);
-    if (idx >= 0) recipes[idx] = { ...recipes[idx], ...data };
-    toast("更新しました");
-  } else {
-    recipes.push({ ...data, id: uid(), createdAt: Date.now() });
-    toast("レシピを保存しました 🎉");
-  }
-  persistRecipes(); renderRecipes(); closeModals();
-  switchTab("recipes");
-});
-
-document.getElementById("btn-new-recipe").addEventListener("click", () => openEditor(null));
-
-// ============================================================
-// 取り込み（SNS / ウェブサイト）
-// ============================================================
-const importStatus = document.getElementById("import-status");
-function setStatus(msg, cls) {
-  importStatus.textContent = msg;
-  importStatus.className = "import-status" + (cls ? " " + cls : "");
-}
-
-function fetchWithTimeout(url, ms = 12000) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
-}
-
-// 直接fetch → CORS回避プロキシ → テキスト抽出サービスの順で試す
-async function fetchPage(url) {
-  const attempts = [
-    { u: url, kind: "html" },
-    { u: "https://api.allorigins.win/raw?url=" + encodeURIComponent(url), kind: "html" },
-    { u: "https://r.jina.ai/" + url, kind: "text" },
-  ];
-  let lastErr;
-  for (const a of attempts) {
-    try {
-      const res = await fetchWithTimeout(a.u);
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const body = await res.text();
-      if (body && body.length > 50) return { body, kind: a.kind };
-      throw new Error("empty");
-    } catch (e) { lastErr = e; }
-  }
-  throw lastErr || new Error("fetch failed");
-}
-
-async function fetchOEmbed(url) {
-  try {
-    const res = await fetchWithTimeout("https://noembed.com/embed?url=" + encodeURIComponent(url), 8000);
-    if (!res.ok) return null;
-    const j = await res.json();
-    if (j && !j.error && j.title) return j;
-  } catch { /* offline等は無視 */ }
-  return null;
-}
-
-function youtubeId(url) {
-  const m = url.match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/)([\w-]{11})/);
-  return m ? m[1] : null;
-}
-
-let pendingMeta = null; // URL取得で得たメタ情報（貼り付け解析時に合成）
-
-document.getElementById("btn-import-url").addEventListener("click", async () => {
-  const url = document.getElementById("import-url").value.trim();
-  if (!url) { setStatus("URLを入力してください", "err"); return; }
-  const platform = P.detectPlatform(url);
-  if (!platform) { setStatus("URLの形式が正しくありません", "err"); return; }
-
-  const btn = document.getElementById("btn-import-url");
-  btn.disabled = true;
-  pendingMeta = { url, platform, source: P.PLATFORM_LABEL[platform] };
-  setStatus(`${P.PLATFORM_LABEL[platform]} から取得中…`);
-
-  try {
-    if (platform === "web") {
-      const { body, kind } = await fetchPage(url);
-      let recipe = null;
-      if (kind === "html" && body.includes("ld+json")) recipe = P.parseJsonLd(body);
-      if (recipe && recipe.ingredients.length) {
-        setStatus("✅ レシピデータ(構造化データ)を検出しました。内容を確認して保存してください。", "ok");
-        finishImport(recipe);
-      } else {
-        const text = kind === "html" ? P.htmlToText(body) : body;
-        const title = kind === "html" ? P.htmlTitle(body) : "";
-        recipe = P.parseText(text, { title });
-        if (recipe.ingredients.length >= 2) {
-          setStatus("✅ ページ本文からレシピを抽出しました。内容を確認して保存してください。", "ok");
-          finishImport(recipe);
-        } else {
-          setStatus("⚠️ ページからレシピを自動抽出できませんでした。\nページのレシピ部分をコピーして、下の貼り付け欄で文字起こしできます。", "err");
-        }
+  $('#gallery').addEventListener('click', e => {
+    const load = e.target.closest('[data-load]');
+    const del = e.target.closest('[data-del]');
+    if (load) {
+      const sv = loadSaves().find(x => x.id === load.dataset.load);
+      if (sv) {
+        Object.assign(state, sv.config, { driving: false });
+        $('#tintRange').value = state.tint;
+        $('#heightRange').value = state.height;
+        refresh();
+        toast(`「${sv.name}」をステージにのせました！`);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    } else {
-      // SNS: oEmbedでタイトル・サムネイルを取得し、本文は貼り付けを促す
-      const meta = await fetchOEmbed(url);
-      if (platform === "youtube") {
-        const vid = youtubeId(url);
-        if (vid && !pendingMeta.image) pendingMeta.image = `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`;
-      }
-      if (meta) {
-        pendingMeta.title = meta.title || "";
-        pendingMeta.image = meta.thumbnail_url || pendingMeta.image || "";
-        pendingMeta.author = meta.author_name || "";
-        setStatus(`✅ 「${meta.title}」${meta.author_name ? ` (${meta.author_name})` : ""} を認識しました。\n投稿の説明文・キャプション（材料や作り方が書かれた部分）をコピーして、下の欄に貼り付けてください。自動で文字起こしします。`, "ok");
-      } else {
-        setStatus(`${P.PLATFORM_LABEL[platform]} のURLとして認識しました。\n投稿の説明文・キャプションをコピーして下の欄に貼り付けると、自動で材料と作り方に文字起こしします。`, "ok");
-      }
-      document.getElementById("import-text").focus();
+    } else if (del) {
+      const saves = loadSaves().filter(x => x.id !== del.dataset.del);
+      localStorage.setItem(STORE_KEY, JSON.stringify(saves));
+      renderGallery();
     }
-  } catch (e) {
-    setStatus("⚠️ ページを取得できませんでした（ネットワーク制限またはサイト側の制限）。\nレシピのテキストをコピーして、下の貼り付け欄をご利用ください。", "err");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-document.getElementById("btn-import-text").addEventListener("click", () => {
-  const text = document.getElementById("import-text").value;
-  if (!text.trim()) { setStatus("テキストを貼り付けてください", "err"); return; }
-  const recipe = P.parseText(text, { title: pendingMeta && pendingMeta.title });
-  if (!recipe.ingredients.length && !recipe.steps.length) {
-    setStatus("⚠️ 材料・手順を検出できませんでした。「材料」「作り方」の見出しを含めて貼り付けると精度が上がります。", "err");
-    return;
-  }
-  setStatus(`✅ 文字起こし完了: 材料${recipe.ingredients.filter((i) => !i.group).length}件・手順${recipe.steps.length}件を検出しました。`, "ok");
-  finishImport(recipe);
-});
-
-function finishImport(recipe) {
-  const meta = pendingMeta || {};
-  const merged = {
-    ...recipe,
-    url: meta.url || "",
-    source: meta.source || "ウェブサイト",
-    image: recipe.image || meta.image || "",
-    category: P.guessRole(recipe),
-    genre: P.guessGenre(recipe),
-  };
-  if (meta.author && merged.tags.length < 6) merged.tags.push(meta.author);
-  openEditor(merged);
+  });
 }
 
-// ============================================================
-// 献立提案
-// ============================================================
-const TARGET_KCAL = { light: 500, normal: 700, hearty: 900 };
-
-document.getElementById("plan-target").addEventListener("change", (e) => {
-  document.getElementById("plan-custom-wrap").style.display = e.target.value === "custom" ? "" : "none";
-});
-
-function recipesByRole() {
-  const map = { 主菜: [], 副菜: [], 汁物: [], 主食: [] };
-  for (const r of recipes) if (map[r.category]) map[r.category].push(r);
-  return map;
-}
-
-function prefScore(r, prefs) {
-  let s = 0;
-  if (prefs.genres.length && prefs.genres.includes(r.genre)) s += 30;
-  const ingText = (r.ingredients || []).map((i) => i.name).join(" ") + r.title;
-  if (prefs.focus === "meat" && /肉|鶏|豚|牛|ひき/.test(ingText)) s += 25;
-  if (prefs.focus === "fish" && /鮭|さば|サバ|ぶり|たら|まぐろ|えび|いか|あさり|ツナ|魚|さんま/.test(ingText)) s += 25;
-  if (prefs.focus === "veg") {
-    const vegCount = (r.ingredients || []).filter((i) => P.shopCategory(i.name) === "野菜・きのこ").length;
-    s += Math.min(25, vegCount * 6);
-  }
-  return s;
-}
-
-function kcalOf(r) {
-  const e = P.estimateCalories(r);
-  // 推定できない場合はカテゴリ別の一般的な目安を使う
-  if (!e.perServing || e.coverage < 0.3) {
-    return { 主菜: 350, 副菜: 90, 汁物: 60, 主食: 500 }[r.category] || 200;
-  }
-  return e.perServing;
-}
-
-// 重み付きランダム選択（スコア上位ほど選ばれやすい）
-function pickWeighted(cands, used) {
-  const pool = cands.filter((c) => !used.has(c.r.id));
-  const list = pool.length ? pool : cands;
-  if (!list.length) return null;
-  list.sort((a, b) => b.score - a.score);
-  const top = list.slice(0, Math.min(4, list.length));
-  const total = top.reduce((s, c) => s + Math.max(1, c.score), 0);
-  let x = Math.random() * total;
-  for (const c of top) { x -= Math.max(1, c.score); if (x <= 0) return c.r; }
-  return top[0].r;
-}
-
-function buildMeal(target, prefs, byRole, used, withRice) {
-  const meal = { dishes: [], kcal: 0 };
-  let remaining = target;
-
-  if (withRice) { meal.kcal += RICE_KCAL_PER_SERVING; remaining -= RICE_KCAL_PER_SERVING; }
-
-  const wantRoles = withRice ? ["主菜", "副菜", "汁物"] : (byRole["主食"].length ? ["主食", "副菜", "汁物"] : ["主菜", "副菜", "汁物"]);
-  const budget = { 主菜: 0.65, 主食: 0.75, 副菜: 0.2, 汁物: 0.15 };
-
-  for (const role of wantRoles) {
-    const cands = byRole[role];
-    if (!cands || !cands.length) continue;
-    const roleTarget = remaining * budget[role];
-    const scored = cands.map((r) => {
-      const k = kcalOf(r);
-      return { r, k, score: 100 - Math.min(90, Math.abs(k - roleTarget) / 4) + prefScore(r, prefs) + Math.random() * 12 };
-    });
-    const pick = pickWeighted(scored, used);
-    if (pick) {
-      used.add(pick.id);
-      const k = kcalOf(pick);
-      meal.dishes.push({ id: pick.id, kcal: k });
-      meal.kcal += k;
-      remaining -= k;
-    }
-  }
-  meal.withRice = withRice;
-  meal.kcal = Math.round(meal.kcal);
-  return meal;
-}
-
-function generatePlan() {
-  const people = Math.max(1, parseInt(document.getElementById("plan-people").value, 10) || 2);
-  const targetSel = document.getElementById("plan-target").value;
-  const target = targetSel === "custom"
-    ? Math.max(200, parseInt(document.getElementById("plan-custom").value, 10) || 700)
-    : TARGET_KCAL[targetSel];
-  const meals = parseInt(document.getElementById("plan-meals").value, 10);
-  const withRice = document.getElementById("plan-rice").checked;
-  const genres = [...document.querySelectorAll("#plan-genres input:checked")].map((c) => c.value);
-  const focus = document.querySelector("#plan-focus input:checked")?.value || "";
-
-  const byRole = recipesByRole();
-  if (!byRole["主菜"].length && !byRole["主食"].length) {
-    toast("主菜または主食のレシピを先に保存してください");
-    return;
-  }
-
-  const prefs = { genres, focus };
-  const used = new Set();
-  const mealList = [];
-  for (let i = 0; i < meals; i++) {
-    // レシピが少ないときは繰り返し使えるように定期的にリセット
-    if (used.size > recipes.length - 3) used.clear();
-    mealList.push(buildMeal(target, prefs, byRole, used, withRice));
-  }
-
-  plan = { people, target, withRice, prefs, meals: mealList, createdAt: Date.now() };
-  persistPlan();
-  renderPlan();
-  toast(`${meals}食分の献立を提案しました 🍽️`);
-}
-
-document.getElementById("btn-generate-plan").addEventListener("click", generatePlan);
-
-function renderPlan() {
-  const box = document.getElementById("plan-result");
-  if (!plan || !plan.meals || !plan.meals.length) {
-    box.innerHTML = `<div class="empty"><span class="big">🍽️</span>条件を設定して「献立を提案」を押すと、<br>保存済みレシピから献立を組み立てます。</div>`;
-    return;
-  }
-  const mealNames = plan.meals.length <= 3 ? ["1食目", "2食目", "3食目"] : null;
-
-  box.innerHTML = `
-    <div class="card" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-      <strong style="font-size:0.9rem">🍽️ ${plan.people}人分 × ${plan.meals.length}食</strong>
-      <span class="chip tag">目標 ${plan.target}kcal/人・食</span>
-      ${plan.withRice ? `<span class="chip tag">ご飯付き</span>` : ""}
-      <button class="btn sm green" id="plan-to-shop" style="margin-left:auto">🛒 この献立で買い物リスト作成</button>
-    </div>
-    ${plan.meals.map((meal, mi) => {
-      const diff = meal.kcal - plan.target;
-      const badge = Math.abs(diff) <= plan.target * 0.15
-        ? `<span class="kcal-badge">約${meal.kcal}kcal/人 ✓</span>`
-        : `<span class="kcal-badge ${diff > 0 ? "over" : ""}">約${meal.kcal}kcal/人</span>`;
-      return `<div class="meal-card">
-        <div class="meal-head">
-          <h3>${mealNames ? mealNames[mi] : `${Math.floor(mi / 3) + 1}日目・${["朝", "昼", "夜"][mi % 3]}`}</h3>
-          ${badge}
-          <button class="btn sm gray" data-remix="${mi}">↺ 再提案</button>
-        </div>
-        ${meal.withRice ? `<div class="dish-row"><span class="chip cat-主食">主食</span> 白ご飯 <span class="d-kcal">約${RICE_KCAL_PER_SERVING}kcal</span></div>` : ""}
-        ${meal.dishes.map((d) => {
-          const r = recipes.find((x) => x.id === d.id);
-          if (!r) return "";
-          return `<div class="dish-row" data-open="${r.id}">
-            <span class="chip cat-${esc(r.category)}">${esc(r.category)}</span>
-            <span>${esc(r.title)}</span>
-            <span class="d-kcal">約${d.kcal}kcal</span>
-          </div>`;
-        }).join("")}
-      </div>`;
-    }).join("")}`;
-
-  box.querySelectorAll("[data-open]").forEach((el) => el.addEventListener("click", () => openDetail(el.dataset.open)));
-  box.querySelectorAll("[data-remix]").forEach((el) =>
-    el.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const mi = parseInt(el.dataset.remix, 10);
-      const used = new Set(plan.meals.flatMap((m, i) => (i === mi ? [] : m.dishes.map((d) => d.id))));
-      plan.meals[mi] = buildMeal(plan.target, plan.prefs, recipesByRole(), used, plan.withRice);
-      persistPlan(); renderPlan();
-    })
-  );
-  const toShop = document.getElementById("plan-to-shop");
-  if (toShop) toShop.addEventListener("click", planToShopping);
-}
-
-// ============================================================
-// 買い物リスト
-// ============================================================
-function addIngredientsToShopping(ingredients, factor, fromLabel) {
-  for (const ing of ingredients) {
-    if (ing.group) continue;
-    const name = P.normalizeIngName(ing.name);
-    const qty = P.scaleQty(ing.qty || "", factor);
-    // 同名・同単位ならマージ（数量を合算）
-    const existing = shopping.find((s) => !s.done && s.name === name);
-    if (existing) {
-      const a = P.parseAmount(existing.qty), b = P.parseAmount(qty);
-      if (!a.vague && !b.vague && a.unit === b.unit) {
-        existing.qty = (a.unit === "大さじ" || a.unit === "小さじ")
-          ? a.unit + P.fmtNum(a.value + b.value)
-          : P.fmtNum(a.value + b.value) + (a.unit || "");
-      } else if (qty && !existing.qty.split(" + ").includes(qty)) {
-        existing.qty = [existing.qty, qty].filter(Boolean).join(" + ");
-      }
-      continue;
-    }
-    shopping.push({ id: uid(), name, qty, cat: P.shopCategory(name), done: false, from: fromLabel || "" });
-  }
-  persistShopping();
-  renderShopping();
-}
-
-function addRecipeToShopping(r, servings) {
-  const factor = (servings || r.servings || 1) / (r.servings || 1);
-  addIngredientsToShopping(r.ingredients || [], factor, r.title);
-}
-
-function planToShopping() {
-  if (!plan) return;
-  let count = 0;
-  for (const meal of plan.meals) {
-    for (const d of meal.dishes) {
-      const r = recipes.find((x) => x.id === d.id);
-      if (!r) continue;
-      addRecipeToShopping(r, plan.people);
-      count++;
-    }
-  }
-  toast(`献立${plan.meals.length}食分(${count}品)の材料を買い物リストに追加しました`);
-  switchTab("shopping");
-}
-
-function renderShopping() {
-  const box = document.getElementById("shop-list");
-  const remaining = shopping.filter((s) => !s.done).length;
-  document.getElementById("shop-count").textContent = shopping.length ? `残り${remaining}件 / 全${shopping.length}件` : "";
-
-  if (!shopping.length) {
-    box.innerHTML = `<div class="empty"><span class="big">🛒</span>買い物リストは空です。<br>レシピ詳細や献立から材料を追加できます。</div>`;
-    return;
-  }
-
-  const cats = [...SHOP_CATEGORIES.map((c) => c.name), "その他"];
-  box.innerHTML = cats.map((cat) => {
-    const items = shopping.filter((s) => s.cat === cat);
-    if (!items.length) return "";
-    return `<div class="shop-cat">${esc(cat)}</div>` + items.map((s) => `
-      <div class="shop-item ${s.done ? "done" : ""}">
-        <input type="checkbox" ${s.done ? "checked" : ""} data-check="${s.id}">
-        <span class="s-name">${esc(s.name)}</span>
-        <span class="s-qty">${esc(s.qty || "")}</span>
-        <button class="s-del" data-del="${s.id}" title="削除">✕</button>
-      </div>`).join("");
-  }).join("");
-
-  box.querySelectorAll("[data-check]").forEach((el) =>
-    el.addEventListener("change", () => {
-      const s = shopping.find((x) => x.id === el.dataset.check);
-      if (s) { s.done = el.checked; persistShopping(); renderShopping(); }
-    })
-  );
-  box.querySelectorAll("[data-del]").forEach((el) =>
-    el.addEventListener("click", () => {
-      shopping = shopping.filter((x) => x.id !== el.dataset.del);
-      persistShopping(); renderShopping();
-    })
-  );
-}
-
-document.getElementById("btn-shop-add").addEventListener("click", () => {
-  const name = document.getElementById("shop-name").value.trim();
-  if (!name) return;
-  const qty = document.getElementById("shop-qty").value.trim();
-  shopping.push({ id: uid(), name, qty, cat: P.shopCategory(name), done: false, from: "手入力" });
-  persistShopping(); renderShopping();
-  document.getElementById("shop-name").value = "";
-  document.getElementById("shop-qty").value = "";
-});
-document.getElementById("shop-name").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") document.getElementById("btn-shop-add").click();
-});
-
-document.getElementById("btn-shop-clear-done").addEventListener("click", () => {
-  shopping = shopping.filter((s) => !s.done);
-  persistShopping(); renderShopping();
-  toast("チェック済みを削除しました");
-});
-
-document.getElementById("btn-shop-clear").addEventListener("click", () => {
-  if (!shopping.length) return;
-  if (confirm("買い物リストを全て削除しますか？")) {
-    shopping = [];
-    persistShopping(); renderShopping();
-  }
-});
-
-document.getElementById("btn-shop-copy").addEventListener("click", async () => {
-  if (!shopping.length) return;
-  const cats = [...SHOP_CATEGORIES.map((c) => c.name), "その他"];
-  const lines = ["🛒 買い物メモ"];
-  for (const cat of cats) {
-    const items = shopping.filter((s) => s.cat === cat && !s.done);
-    if (!items.length) continue;
-    lines.push("", `■ ${cat}`);
-    for (const s of items) lines.push(`・${s.name}${s.qty ? ` ${s.qty}` : ""}`);
-  }
-  const text = lines.join("\n");
-  try {
-    await navigator.clipboard.writeText(text);
-    toast("買い物メモをコピーしました 📋");
-  } catch {
-    prompt("以下をコピーしてください", text);
-  }
-});
-
-// ============================================================
-// モーダル共通
-// ============================================================
-function closeModals() {
-  document.querySelectorAll(".modal-back").forEach((m) => m.classList.remove("open"));
-}
-document.querySelectorAll(".modal-back").forEach((m) => {
-  m.addEventListener("click", (e) => { if (e.target === m) closeModals(); });
-});
-document.querySelectorAll(".close-x").forEach((b) => b.addEventListener("click", closeModals));
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModals(); });
-
-// ---- 初期描画 ----
-renderRecipes();
-renderPlan();
-renderShopping();
+document.addEventListener('DOMContentLoaded', init);

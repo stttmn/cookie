@@ -3,232 +3,119 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>クックノート 🍳 — レシピ保存・献立提案・買い物メモ</title>
-  <meta name="description" content="SNSやウェブサイトのレシピを文字起こしして保存。人数とカロリーに合わせた献立提案と買い物メモ作成。">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍳</text></svg>">
+  <title>🚗 カスタムガレージ — 車の外装アレンジで遊ぼう！</title>
+  <meta name="description" content="いろんな車の外装を自由にアレンジして遊べるサイト。カラー・ホイール・デカール・背景を選んで、あなただけの一台を作ろう！">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<header class="app-header">
-  <h1>🍳 クックノート</h1>
-  <p>SNS・ウェブのレシピを保存して、献立と買い物までおまかせ</p>
-</header>
+  <header class="site-header">
+    <h1>🔧 カスタム<span>ガレージ</span></h1>
+    <p class="tagline">好きな車を、好きなだけドレスアップ。あなただけの一台を作ろう！</p>
+  </header>
 
-<nav class="tabs">
-  <button data-tab="recipes" class="active"><span class="ico">📖</span>レシピ</button>
-  <button data-tab="import"><span class="ico">📥</span>取り込み</button>
-  <button data-tab="plan"><span class="ico">🍽️</span>献立提案</button>
-  <button data-tab="shopping"><span class="ico">🛒</span>買い物</button>
-</nav>
-
-<main>
-
-  <!-- ========== レシピ一覧 ========== -->
-  <section id="view-recipes" class="view active">
-    <div class="toolbar">
-      <input type="text" id="search" placeholder="🔍 料理名・材料・タグで検索">
-      <button class="btn sm" id="btn-new-recipe">＋ 手入力で追加</button>
-    </div>
-    <div class="filter-chips" id="cat-filter">
-      <button data-cat="すべて" class="on">すべて</button>
-      <button data-cat="主菜">主菜</button>
-      <button data-cat="副菜">副菜</button>
-      <button data-cat="汁物">汁物</button>
-      <button data-cat="主食">主食</button>
-      <button data-cat="デザート">デザート</button>
-    </div>
-    <p class="hint" id="recipe-count" style="margin-bottom:8px"></p>
-    <div class="recipe-grid" id="recipe-grid"></div>
-  </section>
-
-  <!-- ========== 取り込み ========== -->
-  <section id="view-import" class="view">
-    <div class="card">
-      <div class="sns-icons">▶️ 📸 🎵 🌐</div>
-      <h2 class="section" style="margin-top:0">URLから取り込む</h2>
-      <p class="hint">YouTube・Instagram・TikTokの投稿URL、またはレシピサイトのURLを貼り付けてください。</p>
-      <label class="fld">投稿・ページのURL</label>
-      <div class="row">
-        <input type="url" id="import-url" placeholder="https://www.youtube.com/watch?v=... / https://cookpad.com/...">
-        <button class="btn" id="btn-import-url" style="flex:0 0 auto">取り込む</button>
-      </div>
-      <div class="import-status" id="import-status"></div>
-      <div class="mono-note">
-        🌐 <b>ウェブサイト</b>: レシピの構造化データや本文から材料・作り方を自動抽出します。<br>
-        📱 <b>SNS</b>: 投稿情報を取得後、下の欄にキャプション・概要欄を貼り付けると自動で文字起こしします。
-      </div>
-    </div>
-
-    <div class="card">
-      <h2 class="section" style="margin-top:0">投稿文・キャプションを文字起こし</h2>
-      <p class="hint">YouTubeの概要欄、Instagram・TikTokのキャプションなど、材料や作り方が書かれたテキストを貼り付けると、自動で「材料」「作り方」に構造化します。</p>
-      <label class="fld">テキストを貼り付け</label>
-      <textarea id="import-text" rows="8" placeholder="例)
-とろとろ親子丼の作り方🐔
-
-【材料(2人分)】
-・鶏もも肉 200g
-・玉ねぎ 1/2個
-・卵 3個
-・めんつゆ 大さじ4
-・水 100ml
-
-【作り方】
-1. 鶏肉と玉ねぎを切る
-2. めんつゆと水で煮る
-3. 溶き卵を回し入れて半熟で火を止める"></textarea>
-      <div style="margin-top:10px">
-        <button class="btn" id="btn-import-text">📝 文字起こしする</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ========== 献立提案 ========== -->
-  <section id="view-plan" class="view">
-    <div class="card">
-      <h2 class="section" style="margin-top:0">🍽️ 条件を設定</h2>
-      <div class="row">
-        <div>
-          <label class="fld">人数</label>
-          <input type="number" id="plan-people" min="1" max="12" value="2">
-        </div>
-        <div>
-          <label class="fld">食数</label>
-          <select id="plan-meals">
-            <option value="1">1食分</option>
-            <option value="2">2食分</option>
-            <option value="3" selected>3食分（1日）</option>
-            <option value="6">6食分（2日）</option>
-            <option value="9">9食分（3日）</option>
-            <option value="21">21食分（1週間）</option>
-          </select>
+  <main>
+    <!-- ステージ -->
+    <section class="stage-section">
+      <div class="stage-wrap" id="stageWrap">
+        <div class="stage" id="stage" aria-live="polite"></div>
+        <div class="name-plate">
+          <span class="name-label">愛車ネーム</span>
+          <strong id="carName"></strong>
         </div>
       </div>
-      <div class="row">
-        <div>
-          <label class="fld">カロリー嗜好（1人1食あたり）</label>
-          <select id="plan-target">
-            <option value="light">🥗 控えめ（約500kcal）</option>
-            <option value="normal" selected>🍚 標準（約700kcal）</option>
-            <option value="hearty">💪 しっかり（約900kcal）</option>
-            <option value="custom">🔢 自分で指定</option>
-          </select>
+      <div class="action-bar">
+        <button type="button" id="gachaBtn" class="action-btn gacha">🎰 おまかせガチャ</button>
+        <button type="button" id="driveBtn" class="action-btn drive">🏁 はしる！</button>
+        <button type="button" id="saveBtn" class="action-btn save">💾 ガレージに保存</button>
+        <button type="button" id="pngBtn" class="action-btn png">📸 PNGで保存</button>
+      </div>
+    </section>
+
+    <!-- コントロールパネル -->
+    <section class="panel" id="controls">
+
+      <div class="panel-block">
+        <h2>🚘 車種をえらぶ</h2>
+        <div class="chip-row" id="carChips"></div>
+      </div>
+
+      <div class="panel-block">
+        <h2>🎨 ボディカラー</h2>
+        <div class="swatch-row">
+          <span id="paintSwatches" class="swatches"></span>
+          <label class="picker-label" title="好きな色を選ぶ">
+            <input type="color" id="paintPicker" value="#e0342f">
+            <span>＋自由な色</span>
+          </label>
         </div>
-        <div id="plan-custom-wrap" style="display:none">
-          <label class="fld">目標kcal</label>
-          <input type="number" id="plan-custom" min="200" max="2000" step="50" value="700">
+        <h3>塗装の仕上げ</h3>
+        <div class="chip-row" id="finishChips"></div>
+      </div>
+
+      <div class="panel-block">
+        <h2>🏷️ デカール</h2>
+        <div class="chip-row" id="decalChips"></div>
+        <div class="swatch-row" id="accentRow">
+          <span class="row-label">デカール色</span>
+          <span id="accentSwatches" class="swatches"></span>
+          <label class="picker-label" title="好きな色を選ぶ">
+            <input type="color" id="accentPicker" value="#ffffff">
+            <span>＋自由な色</span>
+          </label>
         </div>
       </div>
-      <label class="fld">ジャンルの好み（複数選択可）</label>
-      <div class="pills" id="plan-genres">
-        <label><input type="checkbox" value="和食">和食</label>
-        <label><input type="checkbox" value="洋食">洋食</label>
-        <label><input type="checkbox" value="中華">中華</label>
-      </div>
-      <label class="fld">こだわり</label>
-      <div class="pills" id="plan-focus">
-        <label><input type="radio" name="focus" value="" checked>おまかせ</label>
-        <label><input type="radio" name="focus" value="meat">🍖 肉多め</label>
-        <label><input type="radio" name="focus" value="fish">🐟 魚多め</label>
-        <label><input type="radio" name="focus" value="veg">🥬 野菜多め</label>
-      </div>
-      <label class="fld" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="plan-rice" checked style="width:18px;height:18px;accent-color:var(--accent)">
-        白ご飯を献立に含める（約252kcal/人）
-      </label>
-      <div style="margin-top:14px">
-        <button class="btn" id="btn-generate-plan" style="width:100%">✨ 献立を提案してもらう</button>
-      </div>
-    </div>
-    <div id="plan-result"></div>
-  </section>
 
-  <!-- ========== 買い物リスト ========== -->
-  <section id="view-shopping" class="view">
-    <div class="card">
-      <h2 class="section" style="margin-top:0">🛒 買い物メモ <span class="hint" id="shop-count"></span></h2>
-      <div class="row">
-        <input type="text" id="shop-name" placeholder="品名（例: 牛乳）" style="flex:2">
-        <input type="text" id="shop-qty" placeholder="数量（例: 1本）">
-        <button class="btn sm" id="btn-shop-add" style="flex:0 0 auto">追加</button>
+      <div class="panel-block">
+        <h2>🛞 ホイール</h2>
+        <div class="chip-row" id="wheelChips"></div>
+        <div class="swatch-row">
+          <span class="row-label">リム色</span>
+          <span id="rimSwatches" class="swatches"></span>
+        </div>
       </div>
-      <div class="toolbar" style="margin:12px 0 0">
-        <button class="btn sm ghost" id="btn-shop-copy">📋 メモをコピー</button>
-        <button class="btn sm gray" id="btn-shop-clear-done">チェック済みを削除</button>
-        <button class="btn sm danger" id="btn-shop-clear">全削除</button>
-      </div>
-    </div>
-    <div id="shop-list"></div>
-  </section>
 
-</main>
+      <div class="panel-block">
+        <h2>🔩 パーツ &amp; セッティング</h2>
+        <div class="chip-row">
+          <button type="button" id="spoilerBtn" class="chip toggle"><span class="chip-emoji">🪽</span>スポイラー</button>
+          <button type="button" id="roofboxBtn" class="chip toggle"><span class="chip-emoji">🧳</span>ルーフボックス</button>
+          <button type="button" id="glowBtn" class="chip toggle"><span class="chip-emoji">💡</span>ネオン</button>
+          <span id="glowSwatches" class="swatches"></span>
+        </div>
+        <div class="slider-row">
+          <label for="tintRange">🪟 窓のスモーク</label>
+          <input type="range" id="tintRange" min="0" max="100" value="35">
+        </div>
+        <div class="slider-row">
+          <label for="heightRange">📏 車高（シャコタン⇄リフトアップ）</label>
+          <input type="range" id="heightRange" min="-6" max="10" step="2" value="0">
+        </div>
+      </div>
 
-<!-- レシピ詳細モーダル -->
-<div class="modal-back" id="modal-detail">
-  <div class="modal">
-    <button class="close-x">✕</button>
-    <div id="detail-body"></div>
-  </div>
-</div>
+      <div class="panel-block">
+        <h2>🌆 背景ステージ</h2>
+        <div class="chip-row" id="sceneChips"></div>
+      </div>
 
-<!-- エディタモーダル -->
-<div class="modal-back" id="modal-editor">
-  <div class="modal">
-    <button class="close-x">✕</button>
-    <h3 id="editor-title">レシピを編集</h3>
-    <input type="hidden" id="e-id">
-    <label class="fld">料理名 *</label>
-    <input type="text" id="e-title" placeholder="例: 鶏の照り焼き">
-    <div class="row">
-      <div>
-        <label class="fld">カテゴリ</label>
-        <select id="e-cat">
-          <option>主菜</option><option>副菜</option><option>汁物</option>
-          <option>主食</option><option>デザート</option><option>その他</option>
-        </select>
-      </div>
-      <div>
-        <label class="fld">ジャンル</label>
-        <select id="e-genre">
-          <option>和食</option><option>洋食</option><option>中華</option><option>その他</option>
-        </select>
-      </div>
-      <div>
-        <label class="fld">何人分</label>
-        <input type="number" id="e-serv" min="1" max="20" value="2">
-      </div>
-    </div>
-    <label class="fld">材料（1行に1つ「名前 分量」。グループは【タレ】のように）</label>
-    <textarea id="e-ings" rows="8" placeholder="鶏もも肉 1枚&#10;醤油 大さじ2&#10;みりん 大さじ2"></textarea>
-    <label class="fld">作り方（1行に1手順）</label>
-    <textarea id="e-steps" rows="6" placeholder="鶏肉を一口大に切る&#10;フライパンで焼く"></textarea>
-    <label class="fld">タグ（カンマ区切り）</label>
-    <input type="text" id="e-tags" placeholder="時短, お弁当">
-    <label class="fld">メモ</label>
-    <textarea id="e-notes" rows="2" placeholder="コツや感想など"></textarea>
-    <div class="row">
-      <div style="flex:2">
-        <label class="fld">元URL</label>
-        <input type="url" id="e-url">
-      </div>
-      <div>
-        <label class="fld">取り込み元</label>
-        <input type="text" id="e-source">
-      </div>
-    </div>
-    <label class="fld">画像URL</label>
-    <input type="url" id="e-image" placeholder="https://...jpg（任意）">
-    <div style="margin-top:16px">
-      <button class="btn" id="editor-save" style="width:100%">💾 保存する</button>
-    </div>
-  </div>
-</div>
+    </section>
 
-<div id="toast"></div>
+    <!-- ギャラリー -->
+    <section class="gallery-section">
+      <h2>🏠 マイガレージ <span id="galleryCount" class="count"></span></h2>
+      <div class="gallery" id="gallery"></div>
+    </section>
+  </main>
 
-<script src="data.js"></script>
-<script src="parser.js"></script>
-<script src="app.js"></script>
+  <footer class="site-footer">
+    <p>🚗 カスタムガレージ — データはこのブラウザの中だけに保存されます。思う存分カスタムしてOK！</p>
+  </footer>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script src="cars.js"></script>
+  <script src="scenes.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
