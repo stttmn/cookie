@@ -1,0 +1,246 @@
+/* ===== マーケット・ダッシュボード スタイル =====
+   配色は dataviz スキルの検証済みパレット（categorical / status）に準拠 */
+
+:root {
+  color-scheme: light dark;
+
+  /* 面・インク */
+  --surface-1: #fcfcfb;      /* カード面 */
+  --surface-2: #ffffff;      /* 前面（入力など） */
+  --plane:     #f4f4f1;      /* ページ背景 */
+  --ink:       #0b0b0b;
+  --ink-2:     #52514e;
+  --muted:     #898781;
+  --grid:      #e1e0d9;
+  --axis:      #c3c2b7;
+  --border:    rgba(11,11,11,0.10);
+  --border-2:  rgba(11,11,11,0.06);
+
+  /* 上げ / 下げ（グリーン=上げ, レッド=下げ） */
+  --up:   #087f37;
+  --up-bg:  rgba(8,127,55,0.10);
+  --down: #cf3b3b;
+  --down-bg: rgba(207,59,59,0.10);
+  --flat: #898781;
+
+  /* 分類カラー（比較チャート用・固定順） */
+  --s1:#2a78d6; --s2:#1baf7a; --s3:#c98a00; --s4:#008300;
+  --s5:#4a3aa7; --s6:#e34948; --s7:#c85c94; --s8:#eb6834;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(11,11,11,.04), 0 6px 20px rgba(11,11,11,.05);
+  --font: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #1a1a19;
+    --surface-2: #232321;
+    --plane:     #0d0d0d;
+    --ink:       #ffffff;
+    --ink-2:     #c3c2b7;
+    --muted:     #918f88;
+    --grid:      #2c2c2a;
+    --axis:      #383835;
+    --border:    rgba(255,255,255,0.12);
+    --border-2:  rgba(255,255,255,0.06);
+
+    --up:   #1fb457; --up-bg: rgba(31,180,87,0.14);
+    --down: #e66767; --down-bg: rgba(230,103,103,0.14);
+    --flat: #918f88;
+
+    --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s4:#00a300;
+    --s5:#9085e9; --s6:#e66767; --s7:#d55181; --s8:#d95926;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+
+/* data-theme が付いたら OS 設定に勝つ（両方向） */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface-1:#fcfcfb; --surface-2:#ffffff; --plane:#f4f4f1;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7;
+  --border:rgba(11,11,11,0.10); --border-2:rgba(11,11,11,0.06);
+  --up:#087f37; --up-bg:rgba(8,127,55,0.10); --down:#cf3b3b; --down-bg:rgba(207,59,59,0.10); --flat:#898781;
+  --s1:#2a78d6; --s2:#1baf7a; --s3:#c98a00; --s4:#008300; --s5:#4a3aa7; --s6:#e34948; --s7:#c85c94; --s8:#eb6834;
+  --shadow:0 1px 2px rgba(11,11,11,.04), 0 6px 20px rgba(11,11,11,.05);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1:#1a1a19; --surface-2:#232321; --plane:#0d0d0d;
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#918f88; --grid:#2c2c2a; --axis:#383835;
+  --border:rgba(255,255,255,0.12); --border-2:rgba(255,255,255,0.06);
+  --up:#1fb457; --up-bg:rgba(31,180,87,0.14); --down:#e66767; --down-bg:rgba(230,103,103,0.14); --flat:#918f88;
+  --s1:#3987e5; --s2:#199e70; --s3:#c98500; --s4:#00a300; --s5:#9085e9; --s6:#e66767; --s7:#d55181; --s8:#d95926;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font);
+  background: var(--plane);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.45;
+}
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 20px 18px 64px; }
+
+/* ---- ヘッダー ---- */
+.top {
+  display: flex; align-items: center; gap: 14px;
+  flex-wrap: wrap; margin-bottom: 6px;
+}
+.top h1 { font-size: 1.5rem; margin: 0; letter-spacing: -.02em; font-weight: 750; }
+.top .sub { color: var(--ink-2); font-size: .9rem; margin: 2px 0 0; }
+.top .spacer { flex: 1; }
+
+.status-line {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: .82rem; color: var(--muted); margin: 4px 0 18px;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+.dot.live { background: var(--up); box-shadow: 0 0 0 3px var(--up-bg); }
+.dot.demo { background: var(--s3); box-shadow: 0 0 0 3px rgba(201,138,0,.14); }
+.dot.err  { background: var(--down); box-shadow: 0 0 0 3px var(--down-bg); }
+
+.banner {
+  display: none; align-items: flex-start; gap: 10px;
+  background: rgba(201,138,0,.10); border: 1px solid rgba(201,138,0,.35);
+  color: var(--ink-2); padding: 12px 14px; border-radius: var(--radius-sm);
+  font-size: .88rem; margin: 0 0 18px;
+}
+.banner.show { display: flex; }
+.banner b { color: var(--ink); }
+
+/* ---- ボタン ---- */
+.btn {
+  font: inherit; font-size: .85rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--ink);
+  padding: 7px 13px; border-radius: 999px; cursor: pointer;
+  transition: background .12s, border-color .12s, transform .05s;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: translateY(1px); }
+.btn.icon { padding: 7px 11px; }
+
+/* ---- KPI カード（主要指標） ---- */
+.kpi-grid {
+  display: grid; gap: 12px; margin-bottom: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.kpi {
+  background: var(--surface-1); border: 1px solid var(--border-2);
+  border-radius: var(--radius); padding: 14px 15px 12px; box-shadow: var(--shadow);
+  cursor: pointer; position: relative; overflow: hidden;
+  transition: transform .1s, border-color .12s;
+}
+.kpi:hover { transform: translateY(-2px); border-color: var(--border); }
+.kpi.active { border-color: var(--s1); box-shadow: 0 0 0 2px color-mix(in srgb, var(--s1) 30%, transparent), var(--shadow); }
+.kpi .name { font-size: .82rem; color: var(--ink-2); font-weight: 600; }
+.kpi .ticker { font-size: .68rem; color: var(--muted); margin-left: 4px; font-weight: 500; }
+.kpi .price {
+  font-size: 1.55rem; font-weight: 720; letter-spacing: -.02em; margin: 4px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.kpi .chg { font-size: .84rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.kpi .spark { margin-top: 8px; height: 40px; width: 100%; display: block; }
+.kpi .demo-badge {
+  position: absolute; top: 9px; right: 10px; font-size: .58rem; font-weight: 800;
+  letter-spacing: .08em; color: var(--s3); background: rgba(201,138,0,.14);
+  padding: 2px 6px; border-radius: 5px; display: none;
+}
+body.is-demo .kpi .demo-badge { display: inline-block; }
+
+.up   { color: var(--up); }
+.down { color: var(--down); }
+.flat { color: var(--flat); }
+
+.kpi.skeleton { pointer-events: none; }
+.kpi.skeleton .price, .kpi.skeleton .chg, .kpi.skeleton .spark { opacity: 0; }
+.kpi.skeleton::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, var(--border-2), transparent);
+  animation: shimmer 1.3s infinite;
+}
+@keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+
+/* ---- メインチャート ---- */
+.panel {
+  background: var(--surface-1); border: 1px solid var(--border-2);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 18px 18px 14px; margin-bottom: 22px;
+}
+.panel-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.panel-head h2 { font-size: 1.1rem; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+.panel-head .cur-price { font-size: 1.35rem; font-weight: 720; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.panel-head .cur-chg { font-size: .9rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.panel-head .spacer { flex: 1; }
+
+.ranges { display: inline-flex; gap: 4px; background: var(--plane); padding: 3px; border-radius: 999px; border: 1px solid var(--border-2); }
+.ranges button {
+  font: inherit; font-size: .78rem; font-weight: 650; border: 0; background: transparent;
+  color: var(--ink-2); padding: 5px 11px; border-radius: 999px; cursor: pointer;
+}
+.ranges button.on { background: var(--surface-1); color: var(--ink); box-shadow: var(--shadow); }
+
+.chart-host { position: relative; margin-top: 10px; }
+.chart-host svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+/* ツールチップ（クロスヘア） */
+.tt {
+  position: absolute; pointer-events: none; z-index: 5;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 10px; font-size: .78rem;
+  box-shadow: var(--shadow); white-space: nowrap; opacity: 0; transition: opacity .08s;
+  color: var(--ink);
+}
+.tt .tt-date { color: var(--muted); font-size: .72rem; margin-bottom: 2px; }
+.tt .tt-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tt .tt-row { display: flex; align-items: center; gap: 6px; }
+.tt .tt-sw { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+
+/* ---- 比較セクション ---- */
+.cmp-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.cmp-legend .chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--ink-2);
+  padding: 4px 10px; border-radius: 999px; cursor: pointer; user-select: none;
+}
+.cmp-legend .chip.off { opacity: .38; }
+.cmp-legend .chip .sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.cmp-note { font-size: .78rem; color: var(--muted); margin: 0 0 4px; }
+
+/* ---- ウォッチリスト表 ---- */
+.table-host { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.wl { width: 100%; border-collapse: collapse; font-size: .88rem; min-width: 560px; }
+table.wl th, table.wl td { padding: 10px 10px; text-align: right; border-bottom: 1px solid var(--border-2); white-space: nowrap; }
+table.wl th {
+  font-size: .74rem; color: var(--muted); font-weight: 600; text-align: right;
+  cursor: pointer; user-select: none; position: sticky; top: 0; background: var(--surface-1);
+}
+table.wl th:first-child, table.wl td:first-child { text-align: left; }
+table.wl th.sorted::after { content: " ↓"; }
+table.wl th.sorted.asc::after { content: " ↑"; }
+table.wl td.name { font-weight: 650; color: var(--ink); }
+table.wl td .tk { color: var(--muted); font-size: .72rem; font-weight: 500; margin-left: 6px; }
+table.wl td.num { font-variant-numeric: tabular-nums; }
+table.wl tbody tr { cursor: pointer; }
+table.wl tbody tr:hover { background: var(--plane); }
+table.wl td.spark svg { display: block; }
+
+.sec-title { font-size: .95rem; font-weight: 700; margin: 0 0 10px; display: flex; align-items: baseline; gap: 8px; }
+.sec-title small { color: var(--muted); font-weight: 500; font-size: .76rem; }
+
+footer { color: var(--muted); font-size: .78rem; text-align: center; margin-top: 30px; line-height: 1.7; }
+footer a { color: var(--ink-2); }
+
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); border:0; }
+
+@media (max-width: 560px) {
+  .top h1 { font-size: 1.25rem; }
+  .kpi .price { font-size: 1.35rem; }
+  .wrap { padding: 16px 12px 56px; }
+}

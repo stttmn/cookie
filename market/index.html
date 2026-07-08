@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>マーケット・ダッシュボード 📈 — 主要株価指数の推移</title>
+  <meta name="description" content="S&P500・NASDAQ・日経平均など主要な株価指数と銘柄の推移をひと目で。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <h1>📈 マーケット・ダッシュボード</h1>
+      <p class="sub">主要な株価指数・銘柄の推移をひと目で確認</p>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn icon" id="btn-theme" title="ライト / ダークを切り替え" aria-label="テーマ切り替え">🌓</button>
+    <button class="btn" id="btn-refresh">↻ 更新</button>
+  </div>
+
+  <div class="status-line">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-text">読み込み中…</span>
+    <span id="status-updated"></span>
+  </div>
+
+  <div class="banner" id="banner">
+    <span>⚠️</span>
+    <span id="banner-text"></span>
+  </div>
+
+  <!-- 主要指標 KPI -->
+  <section aria-label="主要指標">
+    <div class="kpi-grid" id="kpi-grid"></div>
+  </section>
+
+  <!-- メインチャート -->
+  <section class="panel" aria-label="価格チャート">
+    <div class="panel-head">
+      <h2 id="chart-name">S&amp;P 500</h2>
+      <span class="cur-price" id="chart-price"></span>
+      <span class="cur-chg" id="chart-chg"></span>
+      <div class="spacer"></div>
+      <div class="ranges" id="ranges" role="group" aria-label="期間">
+        <button data-r="1mo">1M</button>
+        <button data-r="3mo">3M</button>
+        <button data-r="6mo">6M</button>
+        <button data-r="1y" class="on">1Y</button>
+        <button data-r="5y">5Y</button>
+      </div>
+    </div>
+    <div class="chart-host" id="main-host">
+      <div class="tt" id="main-tt"></div>
+    </div>
+  </section>
+
+  <!-- 比較（指数化） -->
+  <section class="panel" aria-label="指数比較">
+    <div class="panel-head">
+      <h2>指数を比較 <small style="font-weight:500;color:var(--muted);font-size:.72rem">同時期の起点=100</small></h2>
+      <div class="spacer"></div>
+      <div class="ranges" id="ranges-cmp" role="group" aria-label="比較期間">
+        <button data-r="3mo">3M</button>
+        <button data-r="6mo">6M</button>
+        <button data-r="1y" class="on">1Y</button>
+        <button data-r="5y">5Y</button>
+      </div>
+    </div>
+    <p class="cmp-note">各指数を期間の始点=100として基準化。相対的な強さを比べられます。チップで表示を切り替え。</p>
+    <div class="cmp-legend" id="cmp-legend"></div>
+    <div class="chart-host" id="cmp-host">
+      <div class="tt" id="cmp-tt"></div>
+    </div>
+  </section>
+
+  <!-- ウォッチリスト -->
+  <section class="panel" aria-label="ウォッチリスト">
+    <h3 class="sec-title">ウォッチリスト <small>クリックで上のチャートに表示</small></h3>
+    <div class="table-host">
+      <table class="wl" id="wl-table">
+        <thead>
+          <tr>
+            <th data-k="name">銘柄</th>
+            <th data-k="price">価格</th>
+            <th data-k="chg" class="sorted">前日比</th>
+            <th data-k="pct">前日比%</th>
+            <th data-k="w">週間%</th>
+            <th data-k="spark">30日</th>
+          </tr>
+        </thead>
+        <tbody id="wl-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    データ元: Yahoo Finance（CORSプロキシ経由で取得）。価格は遅延・参考値であり投資助言ではありません。<br>
+    静的サイト（HTML/CSS/JavaScript）· 取得したデータはブラウザ内に一時キャッシュされます。
+  </footer>
+
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
