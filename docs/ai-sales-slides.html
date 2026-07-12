@@ -1,0 +1,525 @@
+<title>広告営業 × AI 活用戦略 — Scalable × Deep Dive</title>
+<style>
+  :root {
+    --bg: #FAFBFC;
+    --surface: #FFFFFF;
+    --ink: #1D2933;
+    --ink-soft: #55646F;
+    --line: #DDE4E9;
+    --scal: #0E8578;
+    --scal-bg: #E9F4F2;
+    --scal-line: #BBDCD7;
+    --deep: #B25A28;
+    --deep-bg: #F8EFE7;
+    --deep-line: #E5CDB9;
+    --chip-bg: #EEF2F5;
+    --shadow: 0 1px 3px rgba(29,41,51,.08), 0 8px 28px rgba(29,41,51,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10171D;
+      --surface: #18222A;
+      --ink: #E7EDF1;
+      --ink-soft: #93A3AE;
+      --line: #2B3843;
+      --scal: #47BFAF;
+      --scal-bg: #14302D;
+      --scal-line: #235A53;
+      --deep: #DE8B4F;
+      --deep-bg: #33241A;
+      --deep-line: #5C3D26;
+      --chip-bg: #212D36;
+      --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 28px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #FAFBFC; --surface: #FFFFFF; --ink: #1D2933; --ink-soft: #55646F;
+    --line: #DDE4E9; --scal: #0E8578; --scal-bg: #E9F4F2; --scal-line: #BBDCD7;
+    --deep: #B25A28; --deep-bg: #F8EFE7; --deep-line: #E5CDB9; --chip-bg: #EEF2F5;
+    --shadow: 0 1px 3px rgba(29,41,51,.08), 0 8px 28px rgba(29,41,51,.07);
+  }
+  :root[data-theme="dark"] {
+    --bg: #10171D; --surface: #18222A; --ink: #E7EDF1; --ink-soft: #93A3AE;
+    --line: #2B3843; --scal: #47BFAF; --scal-bg: #14302D; --scal-line: #235A53;
+    --deep: #DE8B4F; --deep-bg: #33241A; --deep-line: #5C3D26; --chip-bg: #212D36;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 8px 28px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    overflow: hidden;
+  }
+
+  .deck { position: fixed; inset: 0 0 56px 0; }
+  .slide {
+    position: absolute; inset: 0;
+    display: none;
+    padding: clamp(20px, 4vh, 48px) clamp(20px, 5vw, 72px);
+    overflow-y: auto;
+  }
+  .slide.active { display: flex; flex-direction: column; }
+  @media (prefers-reduced-motion: no-preference) {
+    .slide.active { animation: rise .28s ease-out; }
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  }
+  .slide-inner { width: 100%; max-width: 1060px; margin: auto; }
+
+  .eyebrow {
+    font-size: 11px; font-weight: 700; letter-spacing: .18em;
+    color: var(--ink-soft); text-transform: uppercase; margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(30px, 4.6vw, 46px); font-weight: 800;
+    line-height: 1.3; margin: 0 0 18px; text-wrap: balance; letter-spacing: .01em;
+  }
+  h2 {
+    font-size: clamp(21px, 2.6vw, 28px); font-weight: 800;
+    line-height: 1.35; margin: 0 0 6px; text-wrap: balance;
+  }
+  .lead { color: var(--ink-soft); margin: 0 0 22px; max-width: 44em; }
+
+  /* axis legend chips */
+  .axes { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 28px; }
+  .axis-card {
+    flex: 1 1 260px; border-radius: 10px; padding: 18px 20px;
+    border: 1px solid; box-shadow: var(--shadow);
+  }
+  .axis-card.scal { background: var(--scal-bg); border-color: var(--scal-line); }
+  .axis-card.deep { background: var(--deep-bg); border-color: var(--deep-line); }
+  .axis-tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; padding: 3px 10px; border-radius: 999px;
+    color: var(--bg); margin-bottom: 10px;
+  }
+  .scal .axis-tag, .axis-tag.scal { background: var(--scal); }
+  .deep .axis-tag, .axis-tag.deep { background: var(--deep); }
+  .axis-card p { margin: 0; }
+  .axis-card .name { font-weight: 700; font-size: 17px; margin-bottom: 4px; }
+  .axis-card .desc { color: var(--ink-soft); font-size: 13.5px; }
+
+  /* definition table */
+  table { border-collapse: collapse; width: 100%; background: var(--surface); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
+  .table-wrap { overflow-x: auto; }
+  th, td { padding: 11px 16px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14px; }
+  tr:last-child th, tr:last-child td { border-bottom: none; }
+  thead th { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+  thead th.h-scal { color: var(--scal); background: var(--scal-bg); }
+  thead th.h-deep { color: var(--deep); background: var(--deep-bg); }
+  tbody th { font-weight: 700; white-space: nowrap; color: var(--ink-soft); font-size: 13px; width: 6.5em; }
+
+  .funnel-note {
+    margin-top: 20px; padding: 14px 18px; border-radius: 10px;
+    background: var(--chip-bg); border: 1px solid var(--line); font-size: 14px;
+  }
+  .funnel-note b.s { color: var(--scal); }
+  .funnel-note b.d { color: var(--deep); }
+
+  /* process stepper */
+  .stepper { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 18px; }
+  .step {
+    font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px;
+    background: var(--chip-bg); color: var(--ink-soft); border: 1px solid var(--line);
+  }
+  .step.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  /* two-column compare */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+  @media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+  .col { border-radius: 12px; padding: 16px 18px 14px; border: 1px solid; }
+  .col.scal { background: var(--scal-bg); border-color: var(--scal-line); }
+  .col.deep { background: var(--deep-bg); border-color: var(--deep-line); }
+  .col ul { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .col li { background: var(--surface); border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow); }
+  .col li b { display: block; font-size: 14.5px; }
+  .col li span { color: var(--ink-soft); font-size: 13px; }
+  .col li.star { border-left: 3px solid; }
+  .col.scal li.star { border-left-color: var(--scal); }
+  .col.deep li.star { border-left-color: var(--deep); }
+  .tools { margin-top: 12px; font-size: 12px; color: var(--ink-soft); }
+  .tools code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px; background: var(--chip-bg); border: 1px solid var(--line);
+    border-radius: 5px; padding: 1px 7px; white-space: nowrap;
+  }
+
+  /* overview matrix */
+  .matrix { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; margin-top: 18px; font-size: 13.5px; }
+  .matrix > div { padding: 10px 14px; border-radius: 8px; }
+  .m-head { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; align-self: end; padding-bottom: 4px !important; }
+  .m-head.s { color: var(--scal); }
+  .m-head.d { color: var(--deep); }
+  .m-proc { font-weight: 700; background: var(--chip-bg); border: 1px solid var(--line); display: flex; align-items: center; white-space: nowrap; }
+  .m-cell { background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .m-cell.s { border-left: 3px solid var(--scal); }
+  .m-cell.d { border-left: 3px solid var(--deep); }
+  .matrix-wrap { overflow-x: auto; }
+
+  /* mission slide */
+  .mission { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+  @media (max-width: 760px) { .mission { grid-template-columns: 1fr; } }
+  .mission-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow); }
+  .mission-card h3 { margin: 0 0 12px; font-size: 17px; }
+  .flow { display: flex; flex-direction: column; gap: 8px; }
+  .flow .stage { border-radius: 8px; padding: 9px 14px; font-size: 13.5px; border: 1px solid; }
+  .flow .stage.s { background: var(--scal-bg); border-color: var(--scal-line); }
+  .flow .stage.d { background: var(--deep-bg); border-color: var(--deep-line); }
+  .flow .stage b { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; display: block; margin-bottom: 2px; }
+  .flow .stage.s b { color: var(--scal); }
+  .flow .stage.d b { color: var(--deep); }
+  .flow .arrow { text-align: center; color: var(--ink-soft); font-size: 12px; line-height: 1; }
+
+  /* roadmap */
+  .roadmap { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+  .phase { display: flex; gap: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px 18px; box-shadow: var(--shadow); align-items: baseline; }
+  .phase .when { font-weight: 800; font-size: 13px; white-space: nowrap; min-width: 5.5em; font-variant-numeric: tabular-nums; }
+  .phase .what b { font-size: 14.5px; }
+  .phase .what span { color: var(--ink-soft); font-size: 13px; display: block; }
+  .phase.p-d .when { color: var(--deep); }
+  .phase.p-s .when { color: var(--scal); }
+  .caveat { margin-top: 18px; font-size: 12.5px; color: var(--ink-soft); border-top: 1px solid var(--line); padding-top: 12px; }
+
+  /* controls */
+  .controls {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 clamp(16px, 4vw, 40px);
+    background: var(--bg); border-top: 1px solid var(--line);
+  }
+  .controls .hint { font-size: 12px; color: var(--ink-soft); }
+  .nav-btns { display: flex; gap: 8px; align-items: center; }
+  .nav-btns button {
+    font: inherit; font-size: 13px; font-weight: 700;
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 16px; cursor: pointer;
+  }
+  .nav-btns button:hover { border-color: var(--ink-soft); }
+  .nav-btns button:focus-visible, .dots button:focus-visible { outline: 2px solid var(--scal); outline-offset: 2px; }
+  .pageno { font-size: 12.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: center; }
+  .dots { display: flex; gap: 6px; }
+  .dots button { width: 9px; height: 9px; border-radius: 50%; border: none; background: var(--line); cursor: pointer; padding: 0; }
+  .dots button.on { background: var(--ink); }
+  @media (max-width: 640px) { .controls .hint, .dots { display: none; } }
+</style>
+
+<div class="deck" id="deck">
+
+  <!-- 1. title -->
+  <section class="slide active">
+    <div class="slide-inner">
+      <p class="eyebrow">Google Ads Sales × AI Strategy</p>
+      <h1>提案とエンゲージメントを強化する<br>AI活用戦略</h1>
+      <p class="lead">ミッション(配信費用の増加 × 推奨プロダクト導入)に向けて、Googleツールのみで組む。提案プロセス5段階を、2つのアプローチで整理する。</p>
+      <div class="axes">
+        <div class="axis-card scal">
+          <span class="axis-tag">Scalable</span>
+          <p class="name">仕組みで、全顧客に広く</p>
+          <p class="desc">GAS + Gemini API / Ads Scripts による自動化。接点の「量」とカバレッジを稼ぐ。</p>
+        </div>
+        <div class="axis-card deep">
+          <span class="axis-tag">Deep Dive</span>
+          <p class="name">重点顧客に、手厚く深く</p>
+          <p class="desc">Gemini / Deep Research / NotebookLM を対話的に使う。提案の「質」と受注単価を上げる。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. definitions -->
+  <section class="slide">
+    <div class="slide-inner">
+      <p class="eyebrow">考え方</p>
+      <h2>2軸は排他ではなく、漏斗の関係</h2>
+      <p class="lead">全顧客にScalableの網を張り、そこで見つかったシグナルを起点にDeep Diveへ切り替える。</p>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th class="h-scal">Scalable</th><th class="h-deep">Deep Dive</th></tr></thead>
+        <tbody>
+          <tr><th>対象</th><td>担当する全顧客(特にロングテール)</td><td>大口・戦略顧客・増額余地の大きい顧客</td></tr>
+          <tr><th>手段</th><td>GAS + Gemini API / Ads Scripts で自動化</td><td>Gemini / Deep Research / NotebookLM を対話的に</td></tr>
+          <tr><th>成果物</th><td>毎週自動で届くダイジェスト・下書き・アラート</td><td>1社ごとに作り込んだ仮説・提案書・体験</td></tr>
+          <tr><th>人の役割</th><td>確認して送る/対応するだけ</td><td>AIと壁打ちしながら質を作り込む</td></tr>
+          <tr><th>効く先</th><td>接点の量・カバレッジ</td><td>提案の質・受注単価</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="funnel-note"><b class="s">Scalableの網</b>(全顧客) → シグナル検知(増額機会・温度感) → <b class="d">Deep Diveで決めきる</b>(重点顧客)</p>
+    </div>
+  </section>
+
+  <!-- 3. overview matrix -->
+  <section class="slide">
+    <div class="slide-inner">
+      <p class="eyebrow">全体マップ</p>
+      <h2>提案プロセス 5段階 × 2アプローチ</h2>
+      <div class="matrix-wrap">
+      <div class="matrix">
+        <div></div><div class="m-head s">Scalable</div><div class="m-head d">Deep Dive</div>
+        <div class="m-proc">1. Planning</div>
+        <div class="m-cell s">ニュースダイジェスト / IS損失の自動検知</div>
+        <div class="m-cell d">Deep Research / NotebookLM顧客ノートブック</div>
+        <div class="m-proc">2. 商談準備</div>
+        <div class="m-cell s">商談前ブリーフィング自動生成</div>
+        <div class="m-cell d">課題仮説 / 反論処理ロールプレイ</div>
+        <div class="m-proc">3. 提案作成</div>
+        <div class="m-cell s">提案書の一括パーソナライズ</div>
+        <div class="m-cell d">翻訳レイヤー / 松竹梅3案 / レッドチームGem</div>
+        <div class="m-proc">4. エンゲージメント</div>
+        <div class="m-cell s">エンゲージメント・エンジン / メール工場</div>
+        <div class="m-cell d">商談後60分フォロー / NotebookLM共有</div>
+        <div class="m-proc">5. 効果検証</div>
+        <div class="m-cell s">週次サマリ / 異常検知 / 導入ギャップ分析</div>
+        <div class="m-cell d">QBRストーリー / So What変換</div>
+      </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. planning -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="stepper"><span class="step on">1. Planning</span><span class="step">2. 商談準備</span><span class="step">3. 提案作成</span><span class="step">4. エンゲージメント</span><span class="step">5. 効果検証</span></div>
+      <h2>Planning — 誰に・なぜ・いつ攻めるか</h2>
+      <div class="compare">
+        <div class="col scal">
+          <span class="axis-tag scal">Scalable</span>
+          <ul>
+            <li class="star"><b>IS損失(予算)の自動検知</b><span>Ads Scriptsで機会損失アカウントを毎週リストアップ = 増額ターゲットの自動発見</span></li>
+            <li><b>顧客ニュース週次ダイジェスト</b><span>全顧客の新商品・出店・決算をGASが収集、月曜朝に「話しかけるネタ」が届く</span></li>
+            <li><b>伸びしろ自動スコアリング</b><span>顧客リストを毎週採点し「今月攻める上位5社」を通知</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>GAS + Gemini API</code> <code>Ads Scripts</code> <code>Sheets</code></p>
+        </div>
+        <div class="col deep">
+          <span class="axis-tag deep">Deep Dive</span>
+          <ul>
+            <li class="star"><b>NotebookLM 顧客ノートブック</b><span>IR資料・過去提案・議事録を投入し、根拠付きでアカウントプランを構築</span></li>
+            <li><b>Deep Research 徹底調査</b><span>決算・競合・市場動向を1社数十分でレポート化</span></li>
+            <li><b>競合出稿分析</b><span>Ads Transparency Centerの出稿をGeminiで分析し、差別化ポイントを設計</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>Deep Research</code> <code>NotebookLM</code> <code>Gemini</code></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. prep -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="stepper"><span class="step">1. Planning</span><span class="step on">2. 商談準備</span><span class="step">3. 提案作成</span><span class="step">4. エンゲージメント</span><span class="step">5. 効果検証</span></div>
+      <h2>商談準備 — 準備の速さと深さを両立する</h2>
+      <div class="compare">
+        <div class="col scal">
+          <span class="axis-tag scal">Scalable</span>
+          <ul>
+            <li class="star"><b>商談前ブリーフィング自動生成</b><span>Calendarをスキャンし、全商談に「会社概要・ニュース・想定課題・推奨プロダクト」を朝に自動配信。毎回15〜30分の準備を節約</span></li>
+            <li><b>社内事例のNotebookLM化</b><span>事例集を一度整備すれば、全商談で「同業種の成功事例」を引用付きで即答</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>GAS + Calendar + Gemini API</code> <code>NotebookLM</code></p>
+        </div>
+        <div class="col deep">
+          <span class="axis-tag deep">Deep Dive</span>
+          <ul>
+            <li class="star"><b>課題仮説ジェネレーター</b><span>顧客情報から「課題仮説3つ+根拠+検証質問」を生成。プロダクト起点でなく課題起点の商談に</span></li>
+            <li><b>反論処理ロールプレイ</b><span>Geminiに厳しい決裁者を演じさせて模擬商談。「PMaxはブラックボックス」等の定番反論を事前に鍛える</span></li>
+            <li><b>役職別の想定問答集</b><span>CFO/マーケ責任者/現場、それぞれの想定質問と模範回答を準備</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>Gemini (Gems)</code></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. proposal -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="stepper"><span class="step">1. Planning</span><span class="step">2. 商談準備</span><span class="step on">3. 提案作成</span><span class="step">4. エンゲージメント</span><span class="step">5. 効果検証</span></div>
+      <h2>提案作成 — 「Googleの話」を「顧客のビジネスの話」に</h2>
+      <div class="compare">
+        <div class="col scal">
+          <span class="axis-tag scal">Scalable</span>
+          <ul>
+            <li class="star"><b>提案書の一括パーソナライズ</b><span>マスターテンプレ+Sheets顧客データ → GASで10社分を自動差し込み生成</span></li>
+            <li><b>業種別プロダクト説明の量産</b><span>「PMaxを◯◯業の言葉で」の説明バリエーションを事前に量産して使い回す</span></li>
+            <li><b>役職別の書き分け</b><span>経営者3行 / マーケ半ページ / 運用者手順書、を機械的に生成</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>GAS + Slides API + Gemini API</code></p>
+        </div>
+        <div class="col deep">
+          <span class="axis-tag deep">Deep Dive</span>
+          <ul>
+            <li class="star"><b>レッドチームGem</b><span>「予算に厳しい役員」を演じるGemに、提出前の提案書を叩かせて弱点を潰す</span></li>
+            <li><b>翻訳レイヤー</b><span>決算資料から顧客の「公式の言葉・KPI」を抽出し、提案をその語彙で書き直す</span></li>
+            <li><b>松竹梅の3案構成</b><span>増額提案をYes/Noでなく「どれにするか」の議論に変える</span></li>
+            <li><b>Imagen / Veo クリエイティブモック</b><span>「御社ならこんな広告が作れる」を見せる。制作リソース不足の導入障壁も解消</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>Gemini (Gems)</code> <code>Imagen / Veo</code> <code>Google Vids</code></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. engagement -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="stepper"><span class="step">1. Planning</span><span class="step">2. 商談準備</span><span class="step">3. 提案作成</span><span class="step on">4. エンゲージメント</span><span class="step">5. 効果検証</span></div>
+      <h2>エンゲージメント — 「連絡する理由」を絶やさない</h2>
+      <div class="compare">
+        <div class="col scal">
+          <span class="axis-tag scal">Scalable</span>
+          <ul>
+            <li class="star"><b>エンゲージメント・エンジン(本命)</b><span>ニュース / パフォーマンス変化 / 季節の3シグナル → 「連絡する理由+文面下書き」を毎週自動供給</span></li>
+            <li><b>パーソナライズメール工場</b><span>顧客リスト × Gemini APIで各社専用の文面をGmail下書きに一括生成。質を保って量を10倍に</span></li>
+            <li><b>未返信検知・休眠再活性化</b><span>放置スレッドと45日無接点の顧客を検知し、再エンゲージ文面を下書き</span></li>
+            <li><b>月次インサイトレター</b><span>業種ごとに1本、売り込まない「業界の話」を作り同業種顧客全員に展開</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>GAS + Gmail + Gemini API</code> <code>Google Trends</code></p>
+        </div>
+        <div class="col deep">
+          <span class="axis-tag deep">Deep Dive</span>
+          <ul>
+            <li class="star"><b>商談後60分フォロー</b><span>Meet議事録 → お礼+決定事項+「拾い残しトピック」を抽出し、次回商談を仕込む</span></li>
+            <li><b>NotebookLM共有・音声概要</b><span>提案一式をノートブックで渡し、顧客が質問しながら理解できる形に。予習用ポッドキャストも</span></li>
+            <li><b>Google Vids パーソナライズ動画</b><span>多忙な決裁者向けの「3分で見られる提案」</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>Gemini in Meet</code> <code>NotebookLM</code> <code>Google Vids</code></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. measurement -->
+  <section class="slide">
+    <div class="slide-inner">
+      <div class="stepper"><span class="step">1. Planning</span><span class="step">2. 商談準備</span><span class="step">3. 提案作成</span><span class="step">4. エンゲージメント</span><span class="step on">5. 効果検証</span></div>
+      <h2>効果検証 — 検証結果を次の増額・導入の弾にする</h2>
+      <div class="compare">
+        <div class="col scal">
+          <span class="axis-tag scal">Scalable</span>
+          <ul>
+            <li class="star"><b>週次パフォーマンスサマリ自動生成</b><span>全アカウントの変化点+推奨アクションを自然言語で自動配信</span></li>
+            <li><b>異常検知アラート</b><span>CPA/費用の急変を「顧客に説明できる文章」付きで通知 → 聞かれる前に先回り連絡</span></li>
+            <li><b>導入ギャップ分析</b><span>顧客×推奨プロダクトのマトリクスから「今月の導入提案リスト」を自動生成</span></li>
+            <li><b>RSAアセット改善案の量産</b><span>低評価アセットの改善案を自動生成し「来月のテスト」として提案</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>Ads Scripts + Gemini API</code> <code>Looker Studio</code></p>
+        </div>
+        <div class="col deep">
+          <span class="axis-tag deep">Deep Dive</span>
+          <ul>
+            <li class="star"><b>So What変換</b><span>IS損失 → 「機会損失額」への換算など、数字を経営の言葉に翻訳した増額ストーリー</span></li>
+            <li><b>QBRストーリーの作り込み</b><span>実績+目標+議事録から「達成要因 → 学び → 来期投資提案」を構築</span></li>
+            <li><b>検索語句クラスタリング</b><span>部分一致+スマート自動入札を推すための実データ根拠を作る</span></li>
+            <li><b>悪化時の説明資料</b><span>要因分解と挽回プランを速く出し、減額・解約を防ぐ</span></li>
+          </ul>
+          <p class="tools">使う道具: <code>Gemini</code> <code>Colab</code> <code>Sheets</code></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9. mission -->
+  <section class="slide">
+    <div class="slide-inner">
+      <p class="eyebrow">ミッションへの接続</p>
+      <h2>Scalableで発見し、Deep Diveで決めきる</h2>
+      <div class="mission">
+        <div class="mission-card">
+          <h3>ミッション1: 配信費用の増加</h3>
+          <div class="flow">
+            <div class="stage s"><b>Scalable — 機会を漏らさず発見</b>IS損失の自動検知 / エンゲージメント・エンジンが増額シグナルを毎週供給</div>
+            <div class="arrow">▼</div>
+            <div class="stage d"><b>Deep Dive — 決めきる</b>松竹梅3案構成 + So What変換(機会損失額)で投資判断を引き出す</div>
+          </div>
+        </div>
+        <div class="mission-card">
+          <h3>ミッション2: 推奨プロダクト導入</h3>
+          <div class="flow">
+            <div class="stage s"><b>Scalable — ターゲットを自動抽出</b>導入ギャップ分析で「未導入×インパクト大」の顧客リストを毎月生成</div>
+            <div class="arrow">▼</div>
+            <div class="stage d"><b>Deep Dive — 導入障壁を潰す</b>翻訳レイヤーで価値を自分事化 + クリエイティブモックで制作リソース不足を解消</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. roadmap -->
+  <section class="slide">
+    <div class="slide-inner">
+      <p class="eyebrow">Next Steps</p>
+      <h2>実装ロードマップ</h2>
+      <p class="lead">Deep Dive側はノーコードで今日から。コードを書く価値があるのはScalable側。</p>
+      <div class="roadmap">
+        <div class="phase p-d"><span class="when">今日</span><div class="what"><b>Gems登録(ノーコード)</b><span>レッドチームGem / 課題仮説ジェネレーター / 翻訳レイヤー</span></div></div>
+        <div class="phase p-s"><span class="when">1週目</span><div class="what"><b>パーソナライズメール工場</b><span>GAS + Sheets + Gemini API + Gmail下書き。小さく作れてすぐ効果が見える</span></div></div>
+        <div class="phase p-s"><span class="when">2週目</span><div class="what"><b>商談前ブリーフィング自動生成</b><span>Calendar連動で全商談に自動配信</span></div></div>
+        <div class="phase p-s"><span class="when">3–4週目</span><div class="what"><b>週次サマリ+IS損失検知 → エンゲージメント・エンジン</b><span>メール工場の生成部品を再利用して構築</span></div></div>
+      </div>
+      <p class="caveat">運用ルール: 自動化は「下書きまで」— 送信は必ず人間が行う。/ AIの数値・事例は一次ソースで裏取りしてから顧客に提示。/ 顧客データの取り扱いは社内ポリシーに従う。</p>
+    </div>
+  </section>
+
+</div>
+
+<div class="controls">
+  <span class="hint">← → キーでスライド送り</span>
+  <div class="dots" id="dots" role="tablist" aria-label="スライド"></div>
+  <div class="nav-btns">
+    <button type="button" id="prev" aria-label="前のスライド">← 前へ</button>
+    <span class="pageno" id="pageno">1 / 10</span>
+    <button type="button" id="next" aria-label="次のスライド">次へ →</button>
+  </div>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('dots');
+  const pageEl = document.getElementById('pageno');
+  let cur = Math.min(Math.max(parseInt(location.hash.slice(1), 10) - 1 || 0, 0), slides.length - 1);
+
+  slides.forEach((_, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'スライド ' + (i + 1));
+    b.addEventListener('click', () => go(i));
+    dotsEl.appendChild(b);
+  });
+  const dots = Array.from(dotsEl.children);
+
+  function go(i) {
+    cur = Math.min(Math.max(i, 0), slides.length - 1);
+    slides.forEach((s, j) => s.classList.toggle('active', j === cur));
+    dots.forEach((d, j) => d.classList.toggle('on', j === cur));
+    pageEl.textContent = (cur + 1) + ' / ' + slides.length;
+    history.replaceState(null, '', '#' + (cur + 1));
+    slides[cur].scrollTop = 0;
+  }
+
+  document.getElementById('prev').addEventListener('click', () => go(cur - 1));
+  document.getElementById('next').addEventListener('click', () => go(cur + 1));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(cur + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(cur - 1); }
+    if (e.key === 'Home') go(0);
+    if (e.key === 'End') go(slides.length - 1);
+  });
+
+  let touchX = null;
+  document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) > 60) go(cur + (dx < 0 ? 1 : -1));
+    touchX = null;
+  }, { passive: true });
+
+  go(cur);
+</script>
